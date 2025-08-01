@@ -253,8 +253,7 @@ export default function ThreeJSScene() {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-900">
         <div className="text-center">
-          <div className="text-4xl mb-4">🌌</div>
-          <div className="text-xl text-gray-300 mb-2">Visualisation 3D</div>
+          
           <div className="text-sm text-gray-500">
             Uploadez un dataset et générez la visualisation pour voir l'univers 3D
           </div>
