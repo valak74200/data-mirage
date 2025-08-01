@@ -56,7 +56,7 @@ export default function VisualizationPro() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [camera, setCamera] = useState({
     rotation: { x: 0.3, y: 0 },
-    zoom: 0.7, // Better initial zoom for structure visibility
+    zoom: 0.3, // Start zoomed out to see overall structure
     autoRotate: true
   });
   const [isDragging, setIsDragging] = useState(false);
@@ -173,7 +173,7 @@ export default function VisualizationPro() {
     // Project to 2D
     const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
     const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = Math.max(2, (perspective) / (perspective + finalZ) * 6);
+    const size = Math.max(1, (perspective) / (perspective + finalZ) * 4);
     
     return { x: projectedX, y: projectedY, size: size, depth: finalZ };
   }, [camera]);
@@ -234,38 +234,22 @@ export default function VisualizationPro() {
     ctx.stroke();
   }, [project3D]);
 
-  // Helper function to draw cluster regions
+  // Helper function to draw minimal cluster indicators
   const drawClusterRegions = useCallback((ctx: CanvasRenderingContext2D, points: any[], clusters: any[]) => {
+    // Only show cluster labels, no shapes
     clusters.forEach(cluster => {
       const clusterPoints = points.filter(p => p.cluster === cluster.id);
-      if (clusterPoints.length < 3) return;
+      if (clusterPoints.length < 1) return;
       
       // Calculate cluster center
       const centerX = clusterPoints.reduce((sum, p) => sum + p.x, 0) / clusterPoints.length;
       const centerY = clusterPoints.reduce((sum, p) => sum + p.y, 0) / clusterPoints.length;
       
-      // Find maximum distance to determine circle radius
-      const maxDist = Math.max(...clusterPoints.map(p => 
-        Math.sqrt(Math.pow(p.x - centerX, 2) + Math.pow(p.y - centerY, 2))
-      ));
-      
-      // Draw cluster circle
-      ctx.strokeStyle = cluster.color + '40';
-      ctx.fillStyle = cluster.color + '15';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, maxDist + 20, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.setLineDash([]);
-      
-      // Draw cluster label
-      ctx.fillStyle = cluster.color + 'CC';
-      ctx.font = '12px Arial';
+      // Draw small cluster label only
+      ctx.fillStyle = cluster.color + '80';
+      ctx.font = '10px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(`Cluster ${cluster.id}`, centerX, centerY - maxDist - 30);
+      ctx.fillText(`${cluster.id}`, centerX, centerY);
     });
   }, []);
 
@@ -276,19 +260,15 @@ export default function VisualizationPro() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear with gradient background
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#0a0a0a');
-    gradient.addColorStop(0.5, '#1a1a2e');
-    gradient.addColorStop(1, '#16213e');
-    ctx.fillStyle = gradient;
+    // Clear with solid dark background for clarity
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw 3D reference grid first
     drawGrid(ctx);
     
     const points = processingResult.points;
-    const spread = 2;
+    const spread = 5; // Much more spread for clarity
 
     // Project all points and sort by depth
     const projectedPoints = points.map(point => {
@@ -308,78 +288,45 @@ export default function VisualizationPro() {
       drawClusterRegions(ctx, visiblePoints, processingResult.clusters);
     }
 
-    // Draw points with proper depth and sizing
+    // Draw points ultra-minimally
     visiblePoints.forEach(point => {
       const isSelected = selectedPoint === point.id;
       const isAnomaly = point.isAnomaly;
       
-      // Calculate size based on zoom and depth
-      const baseSize = Math.max(3, 8 * camera.zoom);
-      const depthFactor = Math.max(0.4, 1 - Math.abs(point.depth || 0) / 1500);
-      const finalSize = baseSize * depthFactor;
+      // Very small point size
+      const baseSize = 2;
+      const depthFactor = Math.max(0.5, 1 - Math.abs(point.depth || 0) / 2000);
+      const finalSize = baseSize * depthFactor * camera.zoom;
       
-      // Point glow for depth perception
-      if (finalSize > 4 && camera.zoom > 0.6) {
-        const glowGradient = ctx.createRadialGradient(
-          point.x, point.y, 0,
-          point.x, point.y, finalSize * 1.5
-        );
-        glowGradient.addColorStop(0, point.color + '60');
-        glowGradient.addColorStop(1, point.color + '00');
-        ctx.fillStyle = glowGradient;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, finalSize * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      
-      // Main point
-      ctx.fillStyle = point.color;
+      // Main point only - no effects
+      ctx.fillStyle = point.color + 'CC'; // Slightly transparent
       ctx.beginPath();
       ctx.arc(point.x, point.y, finalSize, 0, Math.PI * 2);
       ctx.fill();
       
-      // Point border for definition
-      ctx.strokeStyle = '#00000040';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, finalSize, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Selection highlight
+      // Minimal selection indicator
       if (isSelected) {
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(point.x, point.y, finalSize + 4, 0, Math.PI * 2);
         ctx.stroke();
-        
-        // Pulsing outer ring
-        const pulse = finalSize + 8 + Math.sin(Date.now() * 0.01) * 3;
-        ctx.strokeStyle = '#ffffff60';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, pulse, 0, Math.PI * 2);
-        ctx.stroke();
       }
       
-      // Anomaly indicator
+      // Minimal anomaly indicator
       if (isAnomaly) {
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
+        ctx.fillStyle = '#ff0000';
         ctx.beginPath();
-        ctx.arc(point.x, point.y, finalSize + 6, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.arc(point.x, point.y, finalSize + 1, 0, Math.PI * 2);
+        ctx.fill();
       }
     });
 
-    // Draw depth info
-    ctx.fillStyle = '#ffffff40';
-    ctx.font = '12px Arial';
+    // Minimal info display
+    ctx.fillStyle = '#ffffff20';
+    ctx.font = '10px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText(`Points visibles: ${visiblePoints.length}/${points.length}`, 10, canvas.height - 40);
-    ctx.fillText(`Zoom: ${(camera.zoom * 100).toFixed(0)}%`, 10, canvas.height - 20);
+    ctx.fillText(`${visiblePoints.length}/${points.length} points`, 10, canvas.height - 10);
   }, [processingResult, project3D, selectedPoint, camera, drawGrid, drawClusterRegions, filterPointsByLOD]);
 
   // Animation loop
