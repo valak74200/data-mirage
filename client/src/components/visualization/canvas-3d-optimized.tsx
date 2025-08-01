@@ -249,7 +249,7 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
     <div className="flex-1 relative bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
       <canvas
         ref={canvasRef}
-        className={`w-full h-full ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`canvas-3d w-full h-full ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

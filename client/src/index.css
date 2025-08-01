@@ -61,13 +61,9 @@
   }
 
   body {
-    @apply font-mono antialiased text-foreground overflow-hidden;
+    @apply font-mono antialiased text-foreground;
     background: var(--space);
     cursor: default;
-    touch-action: none; /* Prevent default touch behaviors */
-    -webkit-touch-callout: none; /* Disable iOS callouts */
-    -webkit-user-select: none; /* Disable text selection */
-    user-select: none;
   }
 }
 
@@ -113,6 +109,14 @@
     animation: particle 20s linear infinite;
   }
   
+  /* 3D Visualization specific styles */
+  .canvas-3d {
+    touch-action: none; /* Prevent default touch behaviors for 3D interaction */
+    -webkit-touch-callout: none; /* Disable iOS callouts */
+    -webkit-user-select: none; /* Disable text selection */
+    user-select: none;
+  }
+
   /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
