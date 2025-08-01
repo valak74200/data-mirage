@@ -148,7 +148,7 @@ export default function ThreeJSScene() {
 
   // Update points when data changes
   useEffect(() => {
-    if (!sceneRef.current || !processingResult?.points) return;
+    if (!sceneRef.current || !rendererRef.current || !processingResult?.points) return;
 
     // Remove existing points
     if (pointsRef.current) {
@@ -241,7 +241,9 @@ export default function ThreeJSScene() {
           opacity: 0.3
         });
         const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
-        sceneRef.current.add(lines);
+        if (sceneRef.current) {
+          sceneRef.current.add(lines);
+        }
       }
     });
 

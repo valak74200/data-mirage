@@ -9,6 +9,7 @@ The application features real-time data processing, native file upload capabilit
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Mobile device testing: iPhone - requires optimized mobile 3D visualization
 
 ## System Architecture
 
