@@ -56,7 +56,7 @@ export default function VisualizationPro() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [camera, setCamera] = useState({
     rotation: { x: 0.3, y: 0 },
-    zoom: 1.5,
+    zoom: 0.8, // Start with smaller zoom for better overview
     autoRotate: true
   });
   const [isDragging, setIsDragging] = useState(false);
@@ -173,7 +173,7 @@ export default function VisualizationPro() {
     // Project to 2D
     const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
     const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = Math.max(6, (perspective) / (perspective + finalZ) * 15);
+    const size = Math.max(2, (perspective) / (perspective + finalZ) * 6);
     
     return { x: projectedX, y: projectedY, size: size, depth: finalZ };
   }, [camera]);
@@ -194,7 +194,7 @@ export default function VisualizationPro() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const points = processingResult.points;
-    const spread = 1;
+    const spread = 1.5; // Increase spread for better separation
 
     // Project all points and sort by depth
     const projectedPoints = points.map(point => {
@@ -246,51 +246,51 @@ export default function VisualizationPro() {
       const isSelected = selectedPoint === point.id;
       const isAnomaly = point.isAnomaly;
       
-      // Anomaly glow effect
+      // Anomaly glow effect (reduced)
       if (isAnomaly) {
         const glowGradient = ctx.createRadialGradient(
           point.x, point.y, 0,
-          point.x, point.y, point.size * 3
+          point.x, point.y, point.size * 2
         );
-        glowGradient.addColorStop(0, '#ff000080');
+        glowGradient.addColorStop(0, '#ff000060');
         glowGradient.addColorStop(1, '#ff000000');
         ctx.fillStyle = glowGradient;
         ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size * 3, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, point.size * 2, 0, Math.PI * 2);
         ctx.fill();
       }
       
-      // Selection highlight
+      // Selection highlight (reduced)
       if (isSelected) {
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size + 6, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, point.size + 3, 0, Math.PI * 2);
         ctx.stroke();
         
-        // Pulse effect
-        const pulseSize = point.size + 12 + Math.sin(Date.now() * 0.005) * 4;
+        // Pulse effect (reduced)
+        const pulseSize = point.size + 6 + Math.sin(Date.now() * 0.005) * 2;
         ctx.strokeStyle = '#ffffff40';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(point.x, point.y, pulseSize, 0, Math.PI * 2);
         ctx.stroke();
       }
       
-      // Main point with depth-based size
-      const depthSize = point.size * (1 + Math.max(0, (point.depth || 0) / 1000));
+      // Main point with depth-based size (reduced effect)
+      const depthSize = point.size * (1 + Math.max(0, (point.depth || 0) / 3000));
       ctx.fillStyle = point.color;
       ctx.beginPath();
       ctx.arc(point.x, point.y, depthSize, 0, Math.PI * 2);
       ctx.fill();
       
-      // Inner highlight
-      ctx.fillStyle = '#ffffff60';
+      // Inner highlight (reduced)
+      ctx.fillStyle = '#ffffff40';
       ctx.beginPath();
       ctx.arc(
         point.x - depthSize * 0.3, 
         point.y - depthSize * 0.3, 
-        depthSize * 0.4, 
+        depthSize * 0.3, 
         0, Math.PI * 2
       );
       ctx.fill();
