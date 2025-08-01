@@ -63,7 +63,7 @@
   body {
     @apply font-mono antialiased text-foreground overflow-hidden;
     background: var(--space);
-    cursor: crosshair;
+    cursor: default;
     touch-action: none; /* Prevent default touch behaviors */
     -webkit-touch-callout: none; /* Disable iOS callouts */
     -webkit-user-select: none; /* Disable text selection */
