@@ -1,89 +1,136 @@
-import { type Dataset, type InsertDataset, type Visualization, type InsertVisualization } from "@shared/schema";
-import { randomUUID } from "crypto";
+import {
+  users,
+  datasets,
+  visualizations,
+  type User,
+  type UpsertUser,
+  type Dataset,
+  type InsertDataset,
+  type Visualization,
+  type InsertVisualization,
+} from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
+// Interface for storage operations
 export interface IStorage {
+  // User operations for authentication
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Dataset operations
-  createDataset(dataset: InsertDataset): Promise<Dataset>;
+  createDataset(dataset: InsertDataset, userId?: string): Promise<Dataset>;
   getDataset(id: string): Promise<Dataset | undefined>;
-  getAllDatasets(): Promise<Dataset[]>;
+  getAllDatasets(userId?: string): Promise<Dataset[]>;
+  getUserDatasets(userId: string): Promise<Dataset[]>;
   deleteDataset(id: string): Promise<boolean>;
 
   // Visualization operations
-  createVisualization(visualization: InsertVisualization): Promise<Visualization>;
+  createVisualization(visualization: InsertVisualization, userId?: string): Promise<Visualization>;
   getVisualization(id: string): Promise<Visualization | undefined>;
   getVisualizationsByDataset(datasetId: string): Promise<Visualization[]>;
+  getUserVisualizations(userId: string): Promise<Visualization[]>;
   updateVisualization(id: string, updates: Partial<Visualization>): Promise<Visualization | undefined>;
   deleteVisualization(id: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private datasets: Map<string, Dataset>;
-  private visualizations: Map<string, Visualization>;
-
-  constructor() {
-    this.datasets = new Map();
-    this.visualizations = new Map();
+export class DatabaseStorage implements IStorage {
+  // User operations for authentication
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
-  async createDataset(insertDataset: InsertDataset): Promise<Dataset> {
-    const id = randomUUID();
-    const dataset: Dataset = {
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  // Dataset operations
+  async createDataset(insertDataset: InsertDataset, userId?: string): Promise<Dataset> {
+    const datasetData = {
       ...insertDataset,
-      id,
-      processedData: null,
-      createdAt: new Date(),
+      userId,
     };
-    this.datasets.set(id, dataset);
+    
+    const [dataset] = await db
+      .insert(datasets)
+      .values(datasetData)
+      .returning();
     return dataset;
   }
 
   async getDataset(id: string): Promise<Dataset | undefined> {
-    return this.datasets.get(id);
+    const [dataset] = await db.select().from(datasets).where(eq(datasets.id, id));
+    return dataset;
   }
 
-  async getAllDatasets(): Promise<Dataset[]> {
-    return Array.from(this.datasets.values());
+  async getAllDatasets(userId?: string): Promise<Dataset[]> {
+    if (userId) {
+      return await db.select().from(datasets).where(eq(datasets.userId, userId));
+    }
+    return await db.select().from(datasets);
+  }
+
+  async getUserDatasets(userId: string): Promise<Dataset[]> {
+    return await db.select().from(datasets).where(eq(datasets.userId, userId));
   }
 
   async deleteDataset(id: string): Promise<boolean> {
-    return this.datasets.delete(id);
+    const result = await db.delete(datasets).where(eq(datasets.id, id));
+    return result.rowCount > 0;
   }
 
-  async createVisualization(insertVisualization: InsertVisualization): Promise<Visualization> {
-    const id = randomUUID();
-    const visualization: Visualization = {
+  // Visualization operations
+  async createVisualization(insertVisualization: InsertVisualization, userId?: string): Promise<Visualization> {
+    const visualizationData = {
       ...insertVisualization,
-      id,
-      reducedData: null,
-      clusterData: null,
-      createdAt: new Date(),
+      userId,
     };
-    this.visualizations.set(id, visualization);
+    
+    const [visualization] = await db
+      .insert(visualizations)
+      .values(visualizationData)
+      .returning();
     return visualization;
   }
 
   async getVisualization(id: string): Promise<Visualization | undefined> {
-    return this.visualizations.get(id);
+    const [visualization] = await db.select().from(visualizations).where(eq(visualizations.id, id));
+    return visualization;
   }
 
   async getVisualizationsByDataset(datasetId: string): Promise<Visualization[]> {
-    return Array.from(this.visualizations.values()).filter(
-      (viz) => viz.datasetId === datasetId
-    );
+    return await db.select().from(visualizations).where(eq(visualizations.datasetId, datasetId));
+  }
+
+  async getUserVisualizations(userId: string): Promise<Visualization[]> {
+    return await db.select().from(visualizations).where(eq(visualizations.userId, userId));
   }
 
   async updateVisualization(id: string, updates: Partial<Visualization>): Promise<Visualization | undefined> {
-    const visualization = this.visualizations.get(id);
-    if (!visualization) return undefined;
-
-    const updated = { ...visualization, ...updates };
-    this.visualizations.set(id, updated);
-    return updated;
+    const [visualization] = await db
+      .update(visualizations)
+      .set(updates)
+      .where(eq(visualizations.id, id))
+      .returning();
+    return visualization;
   }
 
   async deleteVisualization(id: string): Promise<boolean> {
-    return this.visualizations.delete(id);
+    const result = await db.delete(visualizations).where(eq(visualizations.id, id));
+    return result.rowCount > 0;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

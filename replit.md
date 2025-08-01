@@ -2,14 +2,25 @@
 
 ## Overview
 
-Data Mirage is a complete, production-ready web application that transforms tabular datasets (CSV/JSON) into immersive 3D visualizations using real machine learning algorithms. The application implements genuine t-SNE/UMAP dimensionality reduction, K-Means/DBSCAN clustering, and statistical anomaly detection to provide meaningful data insights through an interactive 3D interface.
+Data Mirage is a complete, production-ready web application that transforms tabular datasets (CSV/JSON) into immersive 3D visualizations using real machine learning algorithms. The application now features a full authentication system with Replit Auth, multi-page architecture, and a modern animated interface with cyberpunk aesthetics.
 
-The application features real-time data processing, native file upload capabilities, a custom 3D Canvas renderer, and a futuristic cyberpunk-themed user interface with neon effects and glass morphism panels. **No mock data or placeholder algorithms are used** - all ML processing is implemented with real mathematical algorithms.
+The application includes user authentication, personal dataset management, real-time ML processing, and an improved 3D visualization engine with clean, simple rendering optimized for mobile devices (iPhone). All explanations are provided in French for ML beginners.
+
+**Recent Major Updates (January 2025):**
+- ✅ Complete authentication system with Replit Auth integration
+- ✅ Multi-page architecture with landing page, authenticated home, and datasets management
+- ✅ Modern animated interface with glassmorphism and cyberpunk design
+- ✅ Improved 3D visualization engine optimized for clarity and simplicity
+- ✅ PostgreSQL database integration with user-specific data storage
+- ✅ Mobile-optimized 3D rendering for iPhone compatibility
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
 Mobile device testing: iPhone - requires optimized mobile 3D visualization
+UI Design: Modern, animated interface with cyberpunk aesthetics and glassmorphism
+3D Visualization: Clean, clear, and simple - no visual clutter
+Language: All ML explanations in French for beginners
 
 ## System Architecture
 

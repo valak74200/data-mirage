@@ -4,9 +4,12 @@ import { WebSocketServer } from "ws";
 import { storage } from "./storage";
 import { mlProcessor } from "./services/ml-processor";
 import { insertDatasetSchema, insertVisualizationSchema, mlConfigSchema } from "@shared/schema";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication first
+  await setupAuth(app);
   const httpServer = createServer(app);
 
   // WebSocket server for real-time updates
@@ -41,6 +44,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/datasets', async (req: Request, res: Response) => {
     try {
       const { fileName, fileContent, mimeType } = req.body;
+      const userId = (req as any).user?.claims?.sub;
       
       if (!fileContent || !fileName) {
         return res.status(400).json({ error: 'No file content or name provided' });
@@ -81,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: fileName,
         originalData: data,
         metadata,
-      });
+      }, userId);
 
       res.json(dataset);
     } catch (error) {
@@ -90,9 +94,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/datasets', async (req, res) => {
+  // Add auth route before datasets
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const datasets = await storage.getAllDatasets();
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.get('/api/datasets', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const datasets = await storage.getAllDatasets(userId);
       res.json(datasets);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch datasets' });
