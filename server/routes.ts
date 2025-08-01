@@ -4,6 +4,8 @@ import { WebSocketServer } from "ws";
 import { storage } from "./storage";
 import { mlProcessor } from "./services/ml-processor";
 import { insertDatasetSchema, insertVisualizationSchema, mlConfigSchema } from "@shared/schema";
+import { RAGService } from "./services/rag-service";
+import { ProcessingResult } from "../shared/types";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 
@@ -154,8 +156,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ML Processing route
-  app.post('/api/process/:datasetId', async (req, res) => {
+  // Initialize RAG service
+  const ragService = new RAGService();
+
+  // ML Processing route with RAG explanations
+  app.post('/api/process/:datasetId', isAuthenticated, async (req, res) => {
     try {
       const dataset = await storage.getDataset(req.params.datasetId);
       if (!dataset) {
@@ -178,7 +183,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await mlProcessor.processDataset(
         dataset.originalData as Record<string, any>[],
         config
-      );
+      ) as ProcessingResult;
+
+      // Generate AI explanations for clusters
+      try {
+        const explanations = await ragService.explainClusters(result, dataset.metadata);
+        result.explanations = explanations;
+        
+        // Broadcast RAG completion
+        wss.clients.forEach(client => {
+          if (client.readyState === 1) {
+            client.send(JSON.stringify({
+              type: 'rag_completed',
+              datasetId: req.params.datasetId,
+              explanations
+            }));
+          }
+        });
+      } catch (ragError) {
+        console.error('RAG explanation error:', ragError);
+        // Continue without explanations if RAG fails
+        result.explanations = result.clusters.map(cluster => ({
+          clusterId: cluster.id,
+          explanation: `Cluster ${cluster.id} contient ${cluster.points.length} points de données avec des caractéristiques similaires.`,
+          characteristics: ['Données groupées par similarité'],
+          dataPoints: cluster.points.length,
+          keyFeatures: ['Patron identifié']
+        }));
+      }
 
       // Broadcast processing completion
       wss.clients.forEach(client => {

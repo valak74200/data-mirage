@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import Canvas3DOptimized from "@/components/visualization/canvas-3d-optimized";
+import { ClusterExplanations } from "@/components/visualization/cluster-explanations";
 import DatasetUpload from "@/components/dataset/dataset-upload";
 import MLControls from "@/components/ml/ml-controls";
 
@@ -121,6 +122,19 @@ export default function HomeAuthenticated() {
           </div>
         )}
 
+        {/* Cluster Explanations */}
+        {processingResult?.explanations && (
+          <div className="p-6 border-b border-white/10">
+            <ClusterExplanations 
+              explanations={processingResult.explanations}
+              selectedCluster={undefined}
+              onSelectCluster={(clusterId) => {
+                console.log('Selected cluster:', clusterId);
+              }}
+            />
+          </div>
+        )}
+
         {/* Quick Stats */}
         {processingResult && (
           <motion.div 
@@ -143,6 +157,12 @@ export default function HomeAuthenticated() {
                 <span className="text-gray-300">Anomalies:</span>
                 <span className="text-red-400">{processingResult.anomalies?.length || 0}</span>
               </div>
+              {processingResult.explanations && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Explications IA:</span>
+                  <span className="text-purple-400">{processingResult.explanations.length}</span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
