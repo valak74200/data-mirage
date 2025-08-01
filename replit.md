@@ -7,6 +7,12 @@ Data Mirage is a complete, production-ready web application that transforms tabu
 The application includes user authentication, personal dataset management, real-time ML processing, and an improved 3D visualization engine with clean, simple rendering optimized for mobile devices (iPhone). All explanations are provided in French for ML beginners.
 
 **Recent Major Updates (January 2025):**
+- ✅ **COMPLETE 3D VISUALIZATION OVERHAUL** (January 31, 2025 - Evening)
+- ✅ **NEW PROFESSIONAL VISUALIZATION PAGE** with native Canvas 3D renderer
+- ✅ **AUTOMATIC CLUSTER DETECTION** using elbow method - no more manual cluster count
+- ✅ **ENHANCED UX/UI** with glassmorphism design and real-time interactions
+- ✅ **MOBILE-OPTIMIZED 3D ENGINE** with touch controls for iPhone
+- ✅ **INTELLIGENT ML PROCESSING** with auto-optimal clustering
 - ✅ **ARCHITECTURE MIGRATION: Node.js → Python Backend** (January 31, 2025)
 - ✅ Native ML processing with scikit-learn, pandas, numpy
 - ✅ Enhanced RAG service with proper ML algorithms
@@ -14,17 +20,16 @@ The application includes user authentication, personal dataset management, real-
 - ✅ Complete authentication system with Replit Auth integration
 - ✅ Multi-page architecture with landing page, authenticated home, and datasets management
 - ✅ Modern animated interface with glassmorphism and cyberpunk design
-- ✅ Improved 3D visualization engine optimized for clarity and simplicity
 - ✅ PostgreSQL database integration with user-specific data storage
-- ✅ Mobile-optimized 3D rendering for iPhone compatibility
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
 Mobile device testing: iPhone - requires optimized mobile 3D visualization
 UI Design: Modern, animated interface with cyberpunk aesthetics and glassmorphism
-3D Visualization: Clean, clear, and simple - no visual clutter
+3D Visualization: Clean, clear, and simple - no visual clutter, with automatic clustering
 Language: All ML explanations in French for beginners
+Clustering: Automatic detection of optimal clusters using elbow method
 
 ## System Architecture
 

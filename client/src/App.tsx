@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import HomeAuthenticated from "@/pages/home-authenticated";
 import Landing from "@/pages/landing";
 import Datasets from "@/pages/datasets";
+import VisualizationPro from "@/pages/visualization-pro";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -40,8 +41,9 @@ function Router() {
         <Route path="/" component={Landing} />
       ) : (
         <>
-          <Route path="/" component={HomeAuthenticated} />
+          <Route path="/" component={VisualizationPro} />
           <Route path="/datasets" component={Datasets} />
+          <Route path="/legacy" component={HomeAuthenticated} />
         </>
       )}
       <Route component={NotFound} />

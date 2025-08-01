@@ -19,7 +19,7 @@ export class MLProcessor {
       config.reductionMethod
     );
 
-    // Apply clustering
+    // Apply clustering (auto-detect optimal clusters if not specified)
     const clusterResults = this.applyClustering(
       reducedPositions,
       config.clusteringMethod,
@@ -194,13 +194,59 @@ export class MLProcessor {
   private applyClustering(
     positions: [number, number, number][],
     method: 'kmeans' | 'dbscan',
-    numClusters: number
+    numClusters?: number
   ): { labels: number[]; centers: [number, number, number][] } {
     if (method === 'kmeans') {
-      return this.kMeansClustering(positions, numClusters);
+      const optimalClusters = numClusters || this.findOptimalClusterCount(positions);
+      return this.kMeansClustering(positions, optimalClusters);
     } else {
       return this.dbscanClustering(positions);
     }
+  }
+
+  private findOptimalClusterCount(positions: [number, number, number][]): number {
+    if (positions.length < 6) return 2;
+    if (positions.length < 20) return 3;
+    
+    // Use elbow method to find optimal number of clusters
+    const maxClusters = Math.min(8, Math.floor(positions.length / 3));
+    const wcss: number[] = [];
+    
+    for (let k = 2; k <= maxClusters; k++) {
+      const result = this.kMeansClustering(positions, k);
+      let totalWCSS = 0;
+      
+      // Calculate within-cluster sum of squares
+      for (let i = 0; i < k; i++) {
+        const clusterPoints = positions.filter((_, index) => result.labels[index] === i);
+        const center = result.centers[i];
+        
+        if (center && clusterPoints.length > 0) {
+          const clusterWCSS = clusterPoints.reduce((sum, point) => {
+            return sum + this.euclideanDistance(point, center);
+          }, 0);
+          totalWCSS += clusterWCSS;
+        }
+      }
+      wcss.push(totalWCSS);
+    }
+    
+    // Find elbow point (simple approach)
+    let optimalK = 3;
+    let maxImprovement = 0;
+    
+    for (let i = 1; i < wcss.length - 1; i++) {
+      const improvement = wcss[i-1] - wcss[i];
+      const nextImprovement = wcss[i] - wcss[i+1];
+      const ratio = improvement / Math.max(nextImprovement, 0.001);
+      
+      if (ratio > maxImprovement) {
+        maxImprovement = ratio;
+        optimalK = i + 2; // +2 because we start from k=2
+      }
+    }
+    
+    return Math.max(2, Math.min(optimalK, 6)); // Limit to reasonable range
   }
 
   private kMeansClustering(
