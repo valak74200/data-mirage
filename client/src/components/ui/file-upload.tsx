@@ -26,14 +26,15 @@ export default function FileUpload({ onFileUploaded }: FileUploadProps) {
     try {
       const dataset = await uploadDataset(file);
       toast({
-        title: "File uploaded successfully",
-        description: `Dataset "${dataset.name}" is ready for visualization`,
+        title: "✅ DATASET LOADED",
+        description: `${dataset.name} est prêt pour la visualisation`,
       });
       onFileUploaded?.(dataset.id);
     } catch (error) {
+      console.error('Upload error:', error);
       toast({
-        title: "Upload failed",
-        description: "Failed to upload and process the file",
+        title: "❌ UPLOAD FAILED",
+        description: "Impossible de charger le fichier. Vérifiez le format CSV/JSON.",
         variant: "destructive",
       });
     }

@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react";
 import { Dataset, MLConfig, ProcessingResult, DataPoint } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 
 interface VisualizationState {
   currentDataset: Dataset | null;
@@ -47,16 +46,26 @@ export function useVisualizationStore() {
       const payload = {
         fileName: file.name,
         fileContent,
-        mimeType: file.type,
+        mimeType: file.type || 'text/csv',
       };
       
-      const response = await apiRequest('POST', '/api/datasets', payload);
-      const dataset = await response.json();
+      const response = await fetch('/api/datasets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
       
-      console.log('Dataset uploaded successfully:', dataset);
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+      
+      const dataset = await response.json();
       setState(prev => ({ ...prev, currentDataset: dataset, isUploading: false }));
       return dataset;
     } catch (error) {
+      console.error('Upload error:', error);
       setState(prev => ({ ...prev, isUploading: false }));
       throw error;
     }
@@ -73,11 +82,22 @@ export function useVisualizationStore() {
   const processDataset = useCallback(async (datasetId: string, config: MLConfig) => {
     setState(prev => ({ ...prev, isProcessing: true }));
     try {
-      const response = await apiRequest('POST', `/api/process/${datasetId}`, config);
-      const result = await response.json();
+      const response = await fetch(`/api/process/${datasetId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
       
+      if (!response.ok) {
+        throw new Error(`Processing failed: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
       setState(prev => ({ ...prev, processingResult: result, isProcessing: false }));
     } catch (error) {
+      console.error('Processing error:', error);
       setState(prev => ({ ...prev, isProcessing: false }));
       throw error;
     }
@@ -95,8 +115,7 @@ export function useVisualizationStore() {
     setState(prev => ({ ...prev, cameraReset: reset }));
   }, []);
 
-  // Debug logs
-  console.log('Store state - currentDataset:', state.currentDataset);
+
 
   return {
     ...state,
