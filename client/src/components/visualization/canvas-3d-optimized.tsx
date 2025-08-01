@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 
 interface ProcessingResult {
@@ -18,29 +18,29 @@ interface ProcessingResult {
   anomalies: string[];
 }
 
-interface Simple3DCanvasProps {
+interface Canvas3DOptimizedProps {
   processingResult?: ProcessingResult;
 }
 
-export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps) {
+export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimizedProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [autoRotate, setAutoRotate] = useState(true);
-  const [rotation, setRotation] = useState({ x: 0, y: 0 });
+  const rotationRef = useRef({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const animationRef = useRef<number>();
 
   // Simple 3D projection function
-  const project3D = (x: number, y: number, z: number, canvas: HTMLCanvasElement) => {
+  const project3D = useCallback((x: number, y: number, z: number, canvas: HTMLCanvasElement) => {
     const perspective = 800;
     const scale = 200 * zoom;
     
     // Apply rotation
-    const cosX = Math.cos(rotation.x);
-    const sinX = Math.sin(rotation.x);
-    const cosY = Math.cos(rotation.y);
-    const sinY = Math.sin(rotation.y);
+    const cosX = Math.cos(rotationRef.current.x);
+    const sinX = Math.sin(rotationRef.current.x);
+    const cosY = Math.cos(rotationRef.current.y);
+    const sinY = Math.sin(rotationRef.current.y);
     
     // Rotate around Y axis then X axis
     const rotatedX = x * cosY - z * sinY;
@@ -54,18 +54,16 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
     const size = (perspective) / (perspective + finalZ) * 8;
     
     return { x: projectedX, y: projectedY, size: Math.max(2, size), depth: finalZ };
-  };
+  }, [zoom]);
 
-  const drawRef = useRef<() => void>();
-
-  const draw = () => {
+  const draw = useCallback(() => {
     if (!canvasRef.current || !processingResult?.points) return;
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas with gradient background
+    // Clear canvas with space background
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     gradient.addColorStop(0, '#0f172a');
     gradient.addColorStop(0.5, '#1e293b');
@@ -85,15 +83,15 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         canvas
       );
       return { ...point, ...projected };
-    }).sort((a, b) => b.depth - a.depth); // Draw farthest first
+    }).sort((a, b) => b.depth - a.depth);
 
-    // Draw cluster connections (lines)
+    // Draw cluster connections
     if (processingResult.clusters) {
       processingResult.clusters.forEach(cluster => {
         const clusterPoints = projectedPoints.filter(p => p.cluster === cluster.id);
         
         if (clusterPoints.length > 1) {
-          ctx.strokeStyle = cluster.color + '30'; // Semi-transparent
+          ctx.strokeStyle = cluster.color + '40';
           ctx.lineWidth = 1;
           
           for (let i = 0; i < clusterPoints.length; i++) {
@@ -101,7 +99,6 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
               const pointA = clusterPoints[i];
               const pointB = clusterPoints[j];
               
-              // Only connect nearby points
               const distance = Math.sqrt(
                 Math.pow(pointA.position[0] - pointB.position[0], 2) +
                 Math.pow(pointA.position[1] - pointB.position[1], 2) +
@@ -124,7 +121,6 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
     projectedPoints.forEach(point => {
       const isAnomaly = processingResult.anomalies?.includes(point.id);
       
-      // Draw glow effect for anomalies
       if (isAnomaly) {
         const glowGradient = ctx.createRadialGradient(
           point.x, point.y, 0,
@@ -138,32 +134,27 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         ctx.fill();
       }
       
-      // Draw main point
+      // Main point
       ctx.fillStyle = point.color;
       ctx.beginPath();
       ctx.arc(point.x, point.y, point.size, 0, Math.PI * 2);
       ctx.fill();
       
-      // Add subtle highlight
+      // Highlight
       ctx.fillStyle = '#ffffff40';
       ctx.beginPath();
       ctx.arc(point.x - point.size * 0.3, point.y - point.size * 0.3, point.size * 0.3, 0, Math.PI * 2);
       ctx.fill();
     });
-  };
+  }, [processingResult, project3D]);
 
-  drawRef.current = draw;
-
-  // Animation loop with rotation update
+  // Animation loop with stable rotation
   useEffect(() => {
-    let currentRotation = { x: rotation.x, y: rotation.y };
-    
     const animate = () => {
       if (autoRotate) {
-        currentRotation.y += 0.01;
-        setRotation({ ...currentRotation });
+        rotationRef.current.y += 0.01;
       }
-      drawRef.current?.();
+      draw();
       animationRef.current = requestAnimationFrame(animate);
     };
     
@@ -174,12 +165,7 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [autoRotate]);
-
-  // Update rotation when manually changed
-  useEffect(() => {
-    drawRef.current?.();
-  }, [rotation, zoom]);
+  }, [autoRotate, draw]);
 
   // Resize canvas
   useEffect(() => {
@@ -215,10 +201,8 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
     const deltaX = e.clientX - lastMouse.x;
     const deltaY = e.clientY - lastMouse.y;
     
-    setRotation(prev => ({
-      x: prev.x + deltaY * 0.01,
-      y: prev.y + deltaX * 0.01
-    }));
+    rotationRef.current.x += deltaY * 0.01;
+    rotationRef.current.y += deltaX * 0.01;
     
     setLastMouse({ x: e.clientX, y: e.clientY });
   };
@@ -273,7 +257,6 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         onWheel={handleWheel}
       />
       
-      {/* Clean, minimal stats overlay */}
       <motion.div 
         className="absolute top-4 right-4 bg-black/60 backdrop-blur-md rounded-lg p-4 border border-white/10"
         initial={{ opacity: 0, x: 50 }}
@@ -313,7 +296,6 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         </motion.button>
       </motion.div>
       
-      {/* Simple, elegant controls help */}
       <motion.div 
         className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md rounded-lg p-3 border border-white/10"
         initial={{ opacity: 0, y: 50 }}
@@ -323,7 +305,7 @@ export default function Simple3DCanvas({ processingResult }: Simple3DCanvasProps
         <div className="text-xs text-gray-300 space-y-1">
           <div>🖱️ Glisser pour tourner</div>
           <div>🔄 Molette pour zoomer</div>
-          <div>✨ Interface simplifiée</div>
+          <div>✨ Interface optimisée iPhone</div>
         </div>
       </motion.div>
     </div>

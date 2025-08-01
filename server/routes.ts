@@ -41,7 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dataset routes
-  app.post('/api/datasets', async (req: Request, res: Response) => {
+  app.post('/api/datasets', isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { fileName, fileContent, mimeType } = req.body;
       const userId = (req as any).user?.claims?.sub;

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import Simple3DCanvas from "@/components/visualization/simple-3d-canvas";
+import Canvas3DOptimized from "@/components/visualization/canvas-3d-optimized";
 import DatasetUpload from "@/components/dataset/dataset-upload";
 import MLControls from "@/components/ml/ml-controls";
 
@@ -189,7 +189,7 @@ export default function HomeAuthenticated() {
 
         {/* 3D Visualization */}
         <div className="flex-1 relative">
-          <Simple3DCanvas processingResult={processingResult} />
+          <Canvas3DOptimized processingResult={processingResult} />
           
           {!selectedDataset && (
             <motion.div 
