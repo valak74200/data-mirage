@@ -180,6 +180,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
+      console.log('Processing dataset with config:', config);
+      console.log('Dataset sample:', dataset.originalData?.slice(0, 2));
+      
       const result = await mlProcessor.processDataset(
         dataset.originalData as Record<string, any>[],
         config
@@ -205,9 +208,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Continue without explanations if RAG fails
         result.explanations = result.clusters.map(cluster => ({
           clusterId: cluster.id,
-          explanation: `Cluster ${cluster.id} contient ${cluster.points.length} points de données avec des caractéristiques similaires.`,
+          explanation: `Cluster ${cluster.id} contient des points de données avec des caractéristiques similaires.`,
           characteristics: ['Données groupées par similarité'],
-          dataPoints: cluster.points.length,
+          dataPoints: cluster.count || 0,
           keyFeatures: ['Patron identifié']
         }));
       }
@@ -226,10 +229,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error) {
       console.error('Processing error:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: 'Invalid processing config', details: error.errors });
       }
-      res.status(500).json({ error: 'Failed to process dataset' });
+      res.status(500).json({ error: 'Failed to process dataset', details: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
