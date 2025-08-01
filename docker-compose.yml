@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: datamirage_postgres
+    environment:
+      POSTGRES_DB: datamirage
+      POSTGRES_USER: datamirage_user
+      POSTGRES_PASSWORD: dev_password_2024
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command: [
+      "postgres",
+      "-c", "shared_preload_libraries=pg_stat_statements",
+      "-c", "max_connections=200",
+      "-c", "shared_buffers=256MB",
+      "-c", "effective_cache_size=1GB",
+      "-c", "work_mem=16MB",
+      "-c", "maintenance_work_mem=128MB",
+      "-c", "random_page_cost=1.1",
+      "-c", "log_min_duration_statement=1000",
+      "-c", "track_activities=on",
+      "-c", "track_counts=on"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datamirage_user -d datamirage"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: datamirage_redis
+    ports:
+      - "6381:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

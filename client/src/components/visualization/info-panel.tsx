@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import GlassPanel from "@/components/ui/glass-panel";
-import { DataPoint } from "@shared/schema";
+import { DataPoint } from "@shared/types";
 
 interface InfoPanelProps {
   point: DataPoint;

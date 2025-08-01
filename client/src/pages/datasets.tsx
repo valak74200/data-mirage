@@ -1,81 +1,101 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Database, Calendar, Eye, Trash2, Upload, LogOut, User } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Database, Calendar, Eye, Trash2, Upload, LogOut, User, FileText, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { isUnauthorizedError } from "@/lib/authUtils";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/queryClient";
+import { Dataset, DatasetUpload } from "@/types/dataset";
+import { Link } from "wouter";
 
 export default function Datasets() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [datasetName, setDatasetName] = useState<string>('');
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      toast({
-        title: "Non autorisé",
-        description: "Connexion nécessaire. Redirection...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-  }, [isAuthenticated, authLoading, toast]);
-
-  const { data: datasets, isLoading, refetch } = useQuery({
-    queryKey: ["/api/datasets"],
+  // Query pour récupérer tous les datasets
+  const { data: datasets, isLoading, error } = useQuery({
+    queryKey: queryKeys.datasets(),
+    queryFn: () => api.datasets.getAll(),
     enabled: isAuthenticated,
   });
 
-  const handleFileUpload = async (file: File) => {
-    if (!file) return;
-    
-    setUploading(true);
-    try {
-      const fileContent = await file.text();
+  // Mutation pour l'upload de datasets
+  const uploadMutation = useMutation({
+    mutationFn: (upload: DatasetUpload) => api.datasets.upload(upload),
+    onSuccess: (newDataset) => {
+      // Invalider et refetch les datasets
+      queryClient.invalidateQueries({ queryKey: queryKeys.datasets() });
       
-      const response = await fetch("/api/datasets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileContent,
-          mimeType: file.type,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      await refetch();
       setSelectedFile(null);
+      setDatasetName('');
       
       toast({
-        title: "Dataset uploadé",
-        description: `${file.name} a été analysé avec succès`,
+        title: "Dataset uploadé avec succès",
+        description: `${newDataset.name} a été analysé et est prêt pour la visualisation`,
       });
-    } catch (error) {
-      console.error("Upload error:", error);
+    },
+    onError: (error: Error) => {
       toast({
         title: "Erreur d'upload",
-        description: "Impossible d'uploader le dataset",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setUploading(false);
+    },
+  });
+
+  // Mutation pour supprimer un dataset
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.datasets.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.datasets() });
+      toast({
+        title: "Dataset supprimé",
+        description: "Le dataset a été supprimé avec succès",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erreur de suppression",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+    
+    const name = datasetName.trim() || selectedFile.name.replace(/\.[^/.]+$/, '');
+    
+    uploadMutation.mutate({
+      name,
+      file: selectedFile,
+    });
+  };
+
+  const handleDeleteDataset = (dataset: Dataset) => {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer le dataset "${dataset.name}" ? Cette action est irréversible.`)) {
+      deleteMutation.mutate(dataset.id);
     }
   };
+
+  // Gérer les erreurs d'authentification
+  useEffect(() => {
+    if (error && error.message.includes('No valid authentication tokens')) {
+      toast({
+        title: "Session expirée",
+        description: "Veuillez vous reconnecter",
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   if (authLoading || !isAuthenticated) {
     return (
@@ -107,7 +127,7 @@ export default function Datasets() {
           </div>
           
           <Button 
-            onClick={() => window.location.href = '/'}
+            onClick={() => window.location.href = '/dashboard'}
             variant="ghost"
             className="text-gray-300 hover:text-white"
           >
@@ -118,10 +138,10 @@ export default function Datasets() {
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2 text-sm text-gray-300">
             <User className="w-4 h-4" />
-            <span>{user ? ((user as any).firstName || (user as any).email) : 'Utilisateur'}</span>
+            <span>{user ? (user.name || user.email) : 'Utilisateur'}</span>
           </div>
           <Button 
-            onClick={() => window.location.href = '/api/logout'}
+            onClick={logout}
             variant="ghost"
             className="text-gray-300 hover:text-red-400"
           >
@@ -147,30 +167,60 @@ export default function Datasets() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <div className="flex-1">
-                  <label className="block">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-300 font-medium">Nom du dataset</label>
                     <input
-                      type="file"
-                      accept=".csv,.json"
-                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-gray-300
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-lg file:border-0
-                        file:bg-gradient-to-r file:from-cyan-500 file:to-purple-500
-                        file:text-white file:font-semibold
-                        hover:file:from-cyan-600 hover:file:to-purple-600
-                        file:cursor-pointer cursor-pointer"
+                      type="text"
+                      placeholder="Nom personnalisé (optionnel)"
+                      value={datasetName}
+                      onChange={(e) => setDatasetName(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none"
                     />
-                  </label>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-300 font-medium">Fichier</label>
+                    <label className="block">
+                      <input
+                        type="file"
+                        accept=".csv,.json,.xlsx"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setSelectedFile(file);
+                          if (file && !datasetName) {
+                            setDatasetName(file.name.replace(/\.[^/.]+$/, ''));
+                          }
+                        }}
+                        className="block w-full text-sm text-gray-300
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-lg file:border-0
+                          file:bg-gradient-to-r file:from-cyan-500 file:to-purple-500
+                          file:text-white file:font-semibold
+                          hover:file:from-cyan-600 hover:file:to-purple-600
+                          file:cursor-pointer cursor-pointer"
+                      />
+                    </label>
+                  </div>
                 </div>
                 
                 <Button
-                  onClick={() => selectedFile && handleFileUpload(selectedFile)}
-                  disabled={!selectedFile || uploading}
-                  className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 disabled:opacity-50"
+                  onClick={handleFileUpload}
+                  disabled={!selectedFile || uploadMutation.isPending}
+                  className="w-full bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 disabled:opacity-50"
                 >
-                  {uploading ? "Upload..." : "Analyser"}
+                  {uploadMutation.isPending ? (
+                    <>
+                      <Upload className="w-4 h-4 mr-2 animate-spin" />
+                      Upload en cours...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Analyser le dataset
+                    </>
+                  )}
                 </Button>
               </div>
               
@@ -180,9 +230,15 @@ export default function Datasets() {
                   animate={{ opacity: 1, height: "auto" }}
                   className="mt-4 p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/20"
                 >
-                  <p className="text-sm text-cyan-300">
-                    Fichier sélectionné: <span className="font-semibold">{selectedFile.name}</span>
-                  </p>
+                  <div className="flex items-center gap-2 text-sm text-cyan-300">
+                    <FileText className="w-4 h-4" />
+                    <span>
+                      <span className="font-semibold">{selectedFile.name}</span>
+                      <span className="text-gray-400 ml-2">
+                        ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </span>
+                  </div>
                 </motion.div>
               )}
             </CardContent>
@@ -205,7 +261,7 @@ export default function Datasets() {
             </div>
           ) : datasets && Array.isArray(datasets) && datasets.length > 0 ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {datasets.map((dataset: any, index: number) => (
+              {datasets.map((dataset: Dataset, index: number) => (
                 <motion.div
                   key={dataset.id}
                   initial={{ opacity: 0, y: 30 }}
@@ -220,34 +276,50 @@ export default function Datasets() {
                         <CardTitle className="text-white text-lg truncate flex-1 mr-2">
                           {dataset.name}
                         </CardTitle>
-                        <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
-                          {dataset.metadata?.columnCount || 0} cols
-                        </Badge>
+                        <div className="flex gap-1">
+                          <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                            {dataset.column_count} cols
+                          </Badge>
+                          <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+                            {dataset.row_count} rows
+                          </Badge>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex items-center gap-2 text-gray-300 text-sm">
                         <Calendar className="w-4 h-4" />
-                        {new Date(dataset.createdAt).toLocaleDateString('fr-FR')}
+                        {new Date(dataset.created_at).toLocaleDateString('fr-FR', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
                       </div>
                       
-                      <div className="text-gray-400 text-sm">
-                        {dataset.metadata?.rowCount || 0} lignes de données
+                      <div className="flex items-center gap-2 text-gray-400 text-sm">
+                        <BarChart3 className="w-4 h-4" />
+                        {dataset.filename} • {(dataset.size / 1024 / 1024).toFixed(2)} MB
                       </div>
                       
                       <div className="flex gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          onClick={() => window.location.href = `/?dataset=${dataset.id}`}
-                          className="flex-1 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Visualiser
-                        </Button>
+                        <Link href={`/dashboard?dataset=${dataset.id}`} className="flex-1">
+                          <Button
+                            size="sm"
+                            className="w-full bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600"
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            Visualiser
+                          </Button>
+                        </Link>
                         
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDeleteDataset(dataset);
+                          }}
+                          disabled={deleteMutation.isPending}
                           className="border-red-500/40 text-red-400 hover:bg-red-500/10"
                         >
                           <Trash2 className="w-4 h-4" />

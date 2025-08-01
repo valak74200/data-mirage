@@ -1,5 +1,6 @@
 import React, { useState, useCallback, createContext, useContext, ReactNode } from "react";
-import { Dataset, MLConfig, ProcessingResult, DataPoint } from "@shared/schema";
+import { Dataset, ProcessingResult, DataPoint, MLConfig } from "@shared/types";
+import { DatasetAPI, MLAPI } from "@/lib/api";
 
 interface VisualizationState {
   currentDataset: Dataset | null;
@@ -31,6 +32,8 @@ const initialState: VisualizationState = {
   isProcessing: false,
   cameraReset: false,
   mlConfig: {
+    algorithm: 'tsne',
+    parameters: {},
     reductionMethod: 'tsne',
     clusteringMethod: 'kmeans',
     numClusters: 3,
@@ -46,26 +49,10 @@ export function VisualizationProvider({ children }: { children: ReactNode }) {
   const uploadDataset = useCallback(async (file: File): Promise<Dataset> => {
     setState(prev => ({ ...prev, isUploading: true }));
     try {
-      const fileContent = await file.text();
-      const payload = {
-        fileName: file.name,
-        fileContent,
-        mimeType: file.type || 'text/csv',
-      };
-      
-      const response = await fetch('/api/datasets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      const dataset = await DatasetAPI.upload({
+        name: file.name,
+        file: file,
       });
-      
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-      
-      const dataset = await response.json();
       setState(prev => ({ ...prev, currentDataset: dataset, isUploading: false }));
       return dataset;
     } catch (error) {
@@ -86,20 +73,43 @@ export function VisualizationProvider({ children }: { children: ReactNode }) {
   const processDataset = useCallback(async (datasetId: string, config: MLConfig) => {
     setState(prev => ({ ...prev, isProcessing: true }));
     try {
-      const response = await fetch(`/api/process/${datasetId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Convert the current MLConfig structure to the expected MLProcessRequest format
+      const request = {
+        algorithm_id: config.algorithm || config.reductionMethod || 'tsne',
+        parameters: {
+          ...config.parameters,
+          reduction_method: config.reductionMethod,
+          clustering_method: config.clusteringMethod,
+          num_clusters: config.numClusters,
+          detect_anomalies: config.detectAnomalies,
+          color_column: config.colorColumn,
+          size_column: config.sizeColumn,
         },
-        body: JSON.stringify(config),
+      };
+
+      const task = await MLAPI.processDataset(datasetId, request);
+      
+      // Poll for results
+      const completedTask = await MLAPI.pollTaskStatus(task.id, (task) => {
+        // Update progress if needed
+        console.log('Processing progress:', task.progress);
       });
-      
-      if (!response.ok) {
-        throw new Error(`Processing failed: ${response.statusText}`);
+
+      if (completedTask.status === 'completed') {
+        const results = await MLAPI.getResults(completedTask.id);
+        setState(prev => ({ 
+          ...prev, 
+          processingResult: {
+            points: results.results.processed_data,
+            clusters: results.results.metadata.clusters || [],
+            anomalies: results.results.metadata.anomalies || [],
+            explanations: results.results.metadata.explanations || [],
+          }, 
+          isProcessing: false 
+        }));
+      } else {
+        throw new Error(completedTask.error_message || 'Processing failed');
       }
-      
-      const result = await response.json();
-      setState(prev => ({ ...prev, processingResult: result, isProcessing: false }));
     } catch (error) {
       console.error('Processing error:', error);
       setState(prev => ({ ...prev, isProcessing: false }));

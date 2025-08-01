@@ -1,17 +1,21 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Database, LogOut, User, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import ParticleBackground from "@/components/visualization/particle-background";
 import ControlsPanel from "@/components/visualization/controls-panel";
-import ThreeSceneEnhanced from "@/components/visualization/three-scene-enhanced";
+import Canvas3D from "@/components/Canvas3D";
 import LegendPanel from "@/components/visualization/legend-panel";
 import InfoPanel from "@/components/visualization/info-panel";
 import Minimap from "@/components/visualization/minimap";
 import { useVisualizationStore } from "@/stores/visualization-store";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Home() {
   const visualizationStore = useVisualizationStore();
   const { currentDataset, processingResult, hoveredPoint, resetCamera } = visualizationStore;
+  const { user, logout } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -27,19 +31,66 @@ export default function Home() {
   };
 
   return (
-    <div className="relative h-screen flex bg-space text-white overflow-hidden">
+    <div className="relative h-screen flex flex-col bg-space text-white overflow-hidden">
       <ParticleBackground />
       
-      {/* Desktop Side Panel */}
-      {!isMobile && (
-        <motion.div
-          initial={{ x: -320 }}
-          animate={{ x: 0 }}
-          className="w-80 glass-panel border-r border-cyan-500/30 p-6 overflow-y-auto z-10"
-        >
-          <ControlsPanel />
-        </motion.div>
-      )}
+      {/* Navigation Header */}
+      <motion.nav 
+        className="flex justify-between items-center p-4 backdrop-blur-sm bg-black/20 border-b border-cyan-500/30 z-20"
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6 }}
+      >
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">DM</span>
+            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              Data Mirage
+            </span>
+          </div>
+          
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => window.location.href = '/datasets'}
+            className="text-gray-300 hover:text-white"
+          >
+            <Database className="w-4 h-4 mr-2" />
+            Datasets
+          </Button>
+        </div>
+        
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 text-sm text-gray-300">
+            <User className="w-4 h-4" />
+            <span>{user?.name || user?.email || 'User'}</span>
+          </div>
+          <Button 
+            onClick={logout}
+            variant="ghost"
+            size="sm"
+            className="text-gray-300 hover:text-red-400"
+          >
+            <LogOut className="w-4 h-4 mr-1" />
+            Logout
+          </Button>
+        </div>
+      </motion.nav>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Desktop Side Panel */}
+        {!isMobile && (
+          <motion.div
+            initial={{ x: -320 }}
+            animate={{ x: 0 }}
+            className="w-80 glass-panel border-r border-cyan-500/30 p-6 overflow-y-auto z-10"
+          >
+            <ControlsPanel />
+          </motion.div>
+        )}
 
       {/* Mobile Menu Overlay */}
       <AnimatePresence>
@@ -139,7 +190,7 @@ export default function Home() {
         </motion.div>
 
         {/* 3D Visualization */}
-        <ThreeSceneEnhanced />
+        <Canvas3D data={processingResult} />
 
         {/* Info Panel */}
         {hoveredPoint && <InfoPanel point={hoveredPoint} isMobile={isMobile} />}
@@ -149,6 +200,7 @@ export default function Home() {
 
         {/* Minimap - Hide on mobile */}
         {!isMobile && <Minimap />}
+        </div>
       </div>
     </div>
   );

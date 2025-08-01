@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Dataset, ProcessingResult } from '@shared/schema';
+import type { Dataset, ProcessingResult } from '@shared/types';
 
 interface DatasetStatsProps {
   dataset: Dataset;

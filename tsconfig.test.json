@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["client/src/components/Canvas3D/**/*"],
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"]
+}

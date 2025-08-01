@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
+import { MLAPI } from "@/lib/api";
 
 interface MLControlsProps {
   dataset: any;
@@ -30,25 +31,42 @@ export default function MLControls({ dataset, onProcessingComplete }: MLControls
     
     setProcessing(true);
     try {
-      const response = await fetch(`/api/process/${dataset.id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Convert config to the expected MLProcessRequest format
+      const request = {
+        algorithm_id: config.reductionMethod,
+        parameters: {
+          reduction_method: config.reductionMethod,
+          clustering_method: config.clusteringMethod,
+          num_clusters: config.numClusters,
+          detect_anomalies: config.detectAnomalies,
+          color_column: config.colorColumn,
+          size_column: config.sizeColumn,
         },
-        body: JSON.stringify(config),
-      });
+      };
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      onProcessingComplete(result);
+      const task = await MLAPI.processDataset(dataset.id, request);
       
-      toast({
-        title: "Analyse terminée",
-        description: "Visualisation 3D générée avec succès",
+      // Poll for results
+      const completedTask = await MLAPI.pollTaskStatus(task.id, (task) => {
+        console.log('Processing progress:', task.progress);
       });
+
+      if (completedTask.status === 'completed') {
+        const results = await MLAPI.getResults(completedTask.id);
+        onProcessingComplete({
+          points: results.results.processed_data,
+          clusters: results.results.metadata.clusters || [],
+          anomalies: results.results.metadata.anomalies || [],
+          explanations: results.results.metadata.explanations || [],
+        });
+        
+        toast({
+          title: "Analyse terminée",
+          description: "Visualisation 3D générée avec succès",
+        });
+      } else {
+        throw new Error(completedTask.error_message || 'Processing failed');
+      }
     } catch (error) {
       console.error("Processing error:", error);
       toast({

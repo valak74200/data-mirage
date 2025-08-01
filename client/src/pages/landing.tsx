@@ -1,8 +1,244 @@
+import { useState } from "react";
+import * as React from "react";
 import { motion } from "framer-motion";
-import { Database, Zap, Eye, ArrowRight, Sparkles, Brain, Target } from "lucide-react";
+import { useLocation } from "wouter";
+import { Database, Zap, Eye, ArrowRight, Sparkles, Brain, Target, Mail, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/useAuth";
+import { LoginCredentials, RegisterCredentials } from "@/types/dataset";
+
+// Auth Modal Component
+function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [loginForm, setLoginForm] = useState<LoginCredentials>({ email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState<RegisterCredentials>({ email: '', password: '', confirm_password: '', name: '' });
+  const { login, register, isLoggingIn, isRegistering, loginError, registerError, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Close modal when authentication is successful and navigate to dashboard
+  React.useEffect(() => {
+    console.log('AuthModal - Auth state changed:', { isAuthenticated, isOpen });
+    if (isAuthenticated && isOpen) {
+      console.log('AuthModal - Closing modal and redirecting to dashboard...');
+      // Close modal and redirect to dashboard immediately
+      onClose();
+      // Navigate to the dashboard (authenticated main app)
+      setLocation('/dashboard');
+    }
+  }, [isAuthenticated, isOpen, onClose, setLocation]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await login(loginForm);
+      // Success handling is done by the useEffect above
+    } catch (error) {
+      // Error is handled by the useAuth hook
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await register(registerForm);
+      // Success handling is done by the useEffect above
+    } catch (error) {
+      // Error is handled by the useAuth hook
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-md mx-4"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Card className="bg-gray-900/95 border-gray-700 backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2 text-white">
+              <Sparkles className="w-6 h-6 text-cyan-400" />
+              Bienvenue sur Data Mirage
+            </CardTitle>
+            <CardDescription className="text-gray-300">
+              Connectez-vous ou créez un compte pour commencer
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+                <TabsTrigger value="login" className="text-gray-300 data-[state=active]:text-white">
+                  Connexion
+                </TabsTrigger>
+                <TabsTrigger value="register" className="text-gray-300 data-[state=active]:text-white">
+                  Inscription
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login" className="space-y-4 mt-6">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={loginForm.email}
+                        onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="password"
+                        placeholder="Mot de passe"
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  {loginError && (
+                    <div className="text-red-400 text-sm text-center">
+                      {loginError.message}
+                    </div>
+                  )}
+                  
+                  <Button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600"
+                  >
+                    {isLoggingIn ? "Connexion..." : "Se connecter"}
+                  </Button>
+                </form>
+              </TabsContent>
+              
+              <TabsContent value="register" className="space-y-4 mt-6">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Nom (optionnel)"
+                        value={registerForm.name || ''}
+                        onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={registerForm.email}
+                        onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="password"
+                        placeholder="Mot de passe"
+                        value={registerForm.password}
+                        onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="password"
+                        placeholder="Confirmer le mot de passe"
+                        value={registerForm.confirm_password}
+                        onChange={(e) => setRegisterForm({ ...registerForm, confirm_password: e.target.value })}
+                        className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  {registerError && (
+                    <div className="text-red-400 text-sm text-center">
+                      {registerError.message}
+                    </div>
+                  )}
+                  
+                  <Button
+                    type="submit"
+                    disabled={isRegistering}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                  >
+                    {isRegistering ? "Création..." : "Créer un compte"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 export default function Landing() {
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { isAuthenticated, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Redirect authenticated users to the dashboard
+  React.useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      console.log('Landing - User is authenticated, redirecting to dashboard');
+      setLocation('/dashboard');
+    }
+  }, [isAuthenticated, isLoading, setLocation]);
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-400 border-t-transparent"></div>
+          <div className="text-cyan-400 text-lg font-medium">
+            Loading...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 text-white overflow-hidden">
       {/* Animated background particles */}
@@ -46,7 +282,7 @@ export default function Landing() {
         </motion.div>
         
         <Button 
-          onClick={() => window.location.href = '/api/login'}
+          onClick={() => setIsAuthModalOpen(true)}
           className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold px-6 py-2 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/25"
         >
           Se connecter
@@ -82,7 +318,7 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.6 }}
           >
             <Button 
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => setIsAuthModalOpen(true)}
               className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold px-8 py-4 rounded-lg text-lg transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/30 flex items-center gap-2"
             >
               Commencer l'aventure <ArrowRight className="w-5 h-5" />
@@ -170,6 +406,9 @@ export default function Landing() {
 
       {/* Bottom glow */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-cyan-500/20 to-transparent"></div>
+      
+      {/* Auth Modal */}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   );
 }

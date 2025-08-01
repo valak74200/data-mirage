@@ -4,6 +4,7 @@ import { Upload, File, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { DatasetAPI } from "@/lib/api";
 
 interface DatasetUploadProps {
   onDatasetCreated: (dataset: any) => void;
@@ -26,25 +27,12 @@ export default function DatasetUpload({ onDatasetCreated }: DatasetUploadProps) 
     
     setUploading(true);
     try {
-      const fileContent = await selectedFile.text();
-      
-      const response = await fetch("/api/datasets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fileName: selectedFile.name,
-          fileContent,
-          mimeType: selectedFile.type,
-        }),
+      // Use the proper DatasetAPI.upload method with multipart form data
+      const dataset = await DatasetAPI.upload({
+        name: selectedFile.name,
+        file: selectedFile,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const dataset = await response.json();
       onDatasetCreated(dataset);
       setSelectedFile(null);
       
@@ -54,9 +42,10 @@ export default function DatasetUpload({ onDatasetCreated }: DatasetUploadProps) 
       });
     } catch (error) {
       console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Impossible d'uploader le dataset";
       toast({
         title: "Erreur d'upload",
-        description: "Impossible d'uploader le dataset",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

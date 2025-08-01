@@ -1,884 +1,727 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "wouter";
+import { 
+  Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, Settings, 
+  Database, Brain, Eye, User, LogOut, Layers, Cpu, Target,
+  BarChart3, TrendingUp, AlertTriangle, Filter
+} from "lucide-react";
 
-interface DataPoint {
-  id: string;
-  position: [number, number, number];
-  color: string;
-  cluster: number;
-  originalData: any;
-  isAnomaly?: boolean;
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+
+import { useAuth } from "@/hooks/useAuth";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/queryClient";
+import Canvas3D from "@/components/Canvas3D";
+
+import { 
+  Dataset, 
+  MLAlgorithm, 
+  MLProcessRequest, 
+  MLTask, 
+  MLResults,
+  DataPoint,
+  VisualizationConfig,
+  ClusterInfo,
+  ProcessingProgressMessage,
+  ProcessingCompleteMessage,
+  ProcessingErrorMessage,
+  WebSocketMessage
+} from "@/types/dataset";
+
+// Modern ML Configuration
+interface MLConfigState {
+  selectedAlgorithm: string;
+  parameters: Record<string, any>;
+  visualizationSettings: VisualizationConfig;
 }
 
-interface ProcessingResult {
-  points: DataPoint[];
-  clusters: Array<{
-    id: number;
-    color: string;
-    center: [number, number, number];
-    points: string[];
-  }>;
-  anomalies: string[];
-  optimalClusters?: number;
-}
-
-interface Dataset {
-  id: string;
-  name: string;
-  uploadedAt: string;
-  rowCount: number;
-}
-
-interface MLConfig {
-  reductionMethod: 'tsne' | 'umap' | 'pca';
-  clusteringMethod: 'kmeans' | 'dbscan';
-  detectAnomalies: boolean;
-  autoCluster: boolean;
-}
-
-export default function VisualizationPro() {
-  const { user, isAuthenticated } = useAuth();
+export default function VisualizationProModern() {
+  const { user, isAuthenticated, logout } = useAuth();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   
-  // State
+  // État principal
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
-  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
-  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
+  const [currentTask, setCurrentTask] = useState<MLTask | null>(null);
+  const [mlResults, setMLResults] = useState<MLResults | null>(null);
+  const [visualizationData, setVisualizationData] = useState<DataPoint[]>([]);
+  const [clusters, setClusters] = useState<ClusterInfo[]>([]);
+  const [selectedPoint, setSelectedPoint] = useState<DataPoint | null>(null);
+  
+  // Configuration ML
+  const [mlConfig, setMLConfig] = useState<MLConfigState>({
+    selectedAlgorithm: '',
+    parameters: {},
+    visualizationSettings: {
+      reduction_method: 'tsne',
+      n_components: 3,
+      clustering_method: 'kmeans',
+      n_clusters: 3,
+      detect_anomalies: true,
+      point_size: 5,
+      point_opacity: 0.8,
+      background_color: '#0f0f23',
+      color_scheme: 'viridis'
+    }
+  });
+
+  // États UI
+  const [activeTab, setActiveTab] = useState('dataset');
+  const [showSettings, setShowSettings] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  // 3D Visualization state
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [camera, setCamera] = useState({
-    rotation: { x: 0.3, y: 0 },
-    zoom: 0.3, // Start zoomed out to see overall structure
-    autoRotate: true
-  });
-  const [isDragging, setIsDragging] = useState(false);
-  const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
-  const animationRef = useRef<number>();
-  
-  // ML Configuration
-  const [mlConfig, setMLConfig] = useState<MLConfig>({
-    reductionMethod: 'tsne',
-    clusteringMethod: 'kmeans',
-    detectAnomalies: true,
-    autoCluster: true
+
+  // WebSocket pour les mises à jour en temps réel
+  const { isConnected, sendMessage } = useWebSocket({
+    enabled: isAuthenticated,
+    onMessage: handleWebSocketMessage,
   });
 
-  // Fetch datasets
-  const { data: datasets = [] } = useQuery<Dataset[]>({
-    queryKey: ['/api/datasets'],
-    enabled: !!isAuthenticated,
+  function handleWebSocketMessage(message: WebSocketMessage) {
+    switch (message.type) {
+      case 'processing_progress':
+        const progressMsg = message as ProcessingProgressMessage;
+        if (currentTask && progressMsg.data.task_id === currentTask.id) {
+          setCurrentTask(prev => prev ? { ...prev, progress: progressMsg.data.progress } : null);
+        }
+        break;
+        
+      case 'processing_completed':
+        const completeMsg = message as ProcessingCompleteMessage;
+        if (currentTask && completeMsg.data.task_id === currentTask.id) {
+          // Refetch les résultats
+          queryClient.invalidateQueries({ queryKey: queryKeys.mlResults(currentTask.id) });
+          setIsProcessing(false);
+        }
+        break;
+        
+      case 'processing_error':
+        const errorMsg = message as ProcessingErrorMessage;
+        if (currentTask && errorMsg.data.task_id === currentTask.id) {
+          setIsProcessing(false);
+          setCurrentTask(prev => prev ? { ...prev, status: 'failed', error_message: errorMsg.data.error } : null);
+        }
+        break;
+    }
+  }
+
+  // Queries
+  const { data: datasets = [] } = useQuery({
+    queryKey: queryKeys.datasets(),
+    queryFn: () => api.datasets.getAll(),
+    enabled: isAuthenticated,
   });
 
-  // Upload dataset mutation
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('reductionMethod', mlConfig.reductionMethod);
-      formData.append('clusteringMethod', mlConfig.clusteringMethod);
-      formData.append('detectAnomalies', mlConfig.detectAnomalies.toString());
-      
-      // Don't send numClusters when autoCluster is enabled
-      if (!mlConfig.autoCluster) {
-        formData.append('numClusters', '3');
-      }
-      
-      const response = await fetch('/api/datasets', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-      
-      return response.json();
-    },
-    onSuccess: (dataset: Dataset) => {
-      setSelectedDataset(dataset);
-      queryClient.invalidateQueries({ queryKey: ['/api/datasets'] });
-      processDataset(dataset.id);
-    },
+  const { data: algorithms = [] } = useQuery({
+    queryKey: queryKeys.mlAlgorithms(),
+    queryFn: () => api.ml.getAlgorithms(),
+    enabled: isAuthenticated,
   });
 
-  // Process dataset mutation
+  const { data: taskResults } = useQuery({
+    queryKey: queryKeys.mlResults(currentTask?.id || ''),
+    queryFn: () => api.ml.getResults(currentTask!.id),
+    enabled: !!currentTask && currentTask.status === 'completed',
+    refetchInterval: currentTask?.status === 'running' ? 2000 : false,
+  });
+
+  // Mutations
   const processMutation = useMutation({
-    mutationFn: async (datasetId: string) => {
-      const body: any = {
-        reductionMethod: mlConfig.reductionMethod,
-        clusteringMethod: mlConfig.clusteringMethod,
-        detectAnomalies: mlConfig.detectAnomalies,
-      };
+    mutationFn: ({ datasetId, request }: { datasetId: string; request: MLProcessRequest }) =>
+      api.ml.processDataset(datasetId, request),
+    onSuccess: (task) => {
+      setCurrentTask(task);
+      setIsProcessing(true);
+      setActiveTab('results');
       
-      // Only send numClusters if autoCluster is disabled
-      if (!mlConfig.autoCluster) {
-        body.numClusters = 3;
-      }
-      
-      const response = await fetch(`/api/process/${datasetId}`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json' },
+      // Démarrer le polling du statut
+      pollTaskStatus(task.id);
+    },
+    onError: (error) => {
+      toast({
+        title: "Erreur de traitement",
+        description: error.message,
+        variant: "destructive",
       });
-      
-      if (!response.ok) {
-        throw new Error(`Processing failed: ${response.statusText}`);
-      }
-      
-      return response.json();
-    },
-    onSuccess: (result: ProcessingResult) => {
-      setProcessingResult(result);
-      setIsProcessing(false);
-    },
-    onError: () => {
-      setIsProcessing(false);
     },
   });
 
-  const processDataset = (datasetId: string) => {
-    setIsProcessing(true);
-    setProcessingResult(null);
-    processMutation.mutate(datasetId);
-  };
-
-  // 3D Projection and rendering
-  const project3D = useCallback((x: number, y: number, z: number) => {
-    if (!canvasRef.current) return { x: 0, y: 0, size: 4 };
-    
-    const canvas = canvasRef.current;
-    const perspective = 1000;
-    const scale = 150 * camera.zoom;
-    
-    // Apply rotation
-    const cosX = Math.cos(camera.rotation.x);
-    const sinX = Math.sin(camera.rotation.x);
-    const cosY = Math.cos(camera.rotation.y);
-    const sinY = Math.sin(camera.rotation.y);
-    
-    // Rotate around Y axis then X axis
-    const rotatedX = x * cosY - z * sinY;
-    const rotatedZ = x * sinY + z * cosY;
-    const rotatedY = y * cosX - rotatedZ * sinX;
-    const finalZ = y * sinX + rotatedZ * cosX;
-    
-    // Project to 2D
-    const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
-    const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = Math.max(1, (perspective) / (perspective + finalZ) * 4);
-    
-    return { x: projectedX, y: projectedY, size: size, depth: finalZ };
-  }, [camera]);
-
-  // Helper function for Level of Detail - aggressive filtering for clarity
-  const filterPointsByLOD = useCallback((points: any[]) => {
-    const zoomFactor = camera.zoom;
-    
-    if (zoomFactor < 0.3) {
-      // Very zoomed out - show only every 10th point
-      return points.filter((_, index) => index % 10 === 0);
-    } else if (zoomFactor < 0.5) {
-      // Medium-far zoom - show every 5th point
-      return points.filter((_, index) => index % 5 === 0);
-    } else if (zoomFactor < 0.8) {
-      // Medium zoom - show every 3rd point
-      return points.filter((_, index) => index % 3 === 0);
-    } else if (zoomFactor < 1.2) {
-      // Close zoom - show every 2nd point
-      return points.filter((_, index) => index % 2 === 0);
-    } else {
-      // Very close zoom - show all points
-      return points;
-    }
-  }, [camera.zoom]);
-
-  // Helper function to draw minimal 3D reference grid
-  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Only draw main axes, no grid lines for cleaner look
-    ctx.lineWidth = 1;
-    const axisLength = 400;
-    
-    // X axis (subtle red)
-    ctx.strokeStyle = '#ff000015';
-    const xStart = project3D(-axisLength, 0, 0);
-    const xEnd = project3D(axisLength, 0, 0);
-    ctx.beginPath();
-    ctx.moveTo(xStart.x, xStart.y);
-    ctx.lineTo(xEnd.x, xEnd.y);
-    ctx.stroke();
-    
-    // Y axis (subtle green)
-    ctx.strokeStyle = '#00ff0015';
-    const yStart = project3D(0, -axisLength, 0);
-    const yEnd = project3D(0, axisLength, 0);
-    ctx.beginPath();
-    ctx.moveTo(yStart.x, yStart.y);
-    ctx.lineTo(yEnd.x, yEnd.y);
-    ctx.stroke();
-    
-    // Z axis (subtle blue)
-    ctx.strokeStyle = '#0000ff15';
-    const zStart = project3D(0, 0, -axisLength);
-    const zEnd = project3D(0, 0, axisLength);
-    ctx.beginPath();
-    ctx.moveTo(zStart.x, zStart.y);
-    ctx.lineTo(zEnd.x, zEnd.y);
-    ctx.stroke();
-  }, [project3D]);
-
-  // Helper function to draw minimal cluster indicators
-  const drawClusterRegions = useCallback((ctx: CanvasRenderingContext2D, points: any[], clusters: any[]) => {
-    // Only show cluster labels, no shapes
-    clusters.forEach(cluster => {
-      const clusterPoints = points.filter(p => p.cluster === cluster.id);
-      if (clusterPoints.length < 1) return;
-      
-      // Calculate cluster center
-      const centerX = clusterPoints.reduce((sum, p) => sum + p.x, 0) / clusterPoints.length;
-      const centerY = clusterPoints.reduce((sum, p) => sum + p.y, 0) / clusterPoints.length;
-      
-      // Draw small cluster label only
-      ctx.fillStyle = cluster.color + '80';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${cluster.id}`, centerX, centerY);
-    });
-  }, []);
-
-  const drawVisualization = useCallback(() => {
-    if (!canvasRef.current || !processingResult?.points) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear with solid dark background for clarity
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw 3D reference grid first
-    drawGrid(ctx);
-    
-    const points = processingResult.points;
-    const spread = 5; // Much more spread for clarity
-
-    // Project all points and sort by depth
-    const projectedPoints = points.map(point => {
-      const projected = project3D(
-        point.position[0] * spread,
-        point.position[1] * spread,
-        point.position[2] * spread
-      );
-      return { ...point, ...projected };
-    }).sort((a, b) => (b.depth || 0) - (a.depth || 0));
-
-    // Apply Level of Detail filtering
-    const visiblePoints = filterPointsByLOD(projectedPoints);
-    
-    // Draw cluster regions
-    if (processingResult.clusters && camera.zoom > 0.3) {
-      drawClusterRegions(ctx, visiblePoints, processingResult.clusters);
-    }
-
-    // Draw points ultra-minimally
-    visiblePoints.forEach(point => {
-      const isSelected = selectedPoint === point.id;
-      const isAnomaly = point.isAnomaly;
-      
-      // Very small point size
-      const baseSize = 2;
-      const depthFactor = Math.max(0.5, 1 - Math.abs(point.depth || 0) / 2000);
-      const finalSize = baseSize * depthFactor * camera.zoom;
-      
-      // Main point only - no effects
-      ctx.fillStyle = point.color + 'CC'; // Slightly transparent
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, finalSize, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Minimal selection indicator
-      if (isSelected) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, finalSize + 4, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      
-      // Minimal anomaly indicator
-      if (isAnomaly) {
-        ctx.fillStyle = '#ff0000';
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, finalSize + 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    // Minimal info display
-    ctx.fillStyle = '#ffffff20';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${visiblePoints.length}/${points.length} points`, 10, canvas.height - 10);
-  }, [processingResult, project3D, selectedPoint, camera, drawGrid, drawClusterRegions, filterPointsByLOD]);
-
-  // Animation loop
-  useEffect(() => {
-    const animate = () => {
-      if (camera.autoRotate && !isDragging) {
-        setCamera(prev => ({
-          ...prev,
-          rotation: {
-            ...prev.rotation,
-            y: prev.rotation.y + 0.005
+  // Polling du statut de la tâche
+  const pollTaskStatus = useCallback(async (taskId: string) => {
+    try {
+      await api.ml.pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask(task);
+          if (task.status === 'completed' || task.status === 'failed') {
+            setIsProcessing(false);
           }
-        }));
-      }
-      drawVisualization();
-      animationRef.current = requestAnimationFrame(animate);
-    };
-    
-    animate();
-    
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [camera.autoRotate, isDragging, drawVisualization]);
-
-  // Canvas interactions
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !processingResult?.points) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Check for point clicks
-    const points = processingResult.points.map(point => {
-      const projected = project3D(
-        point.position[0],
-        point.position[1], 
-        point.position[2]
+        }
       );
-      return { ...point, ...projected };
-    });
+    } catch (error) {
+      console.error('Polling error:', error);
+      setIsProcessing(false);
+    }
+  }, []);
 
-    for (const point of points) {
-      const distance = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
-      if (distance <= point.size + 4) {
-        setSelectedPoint(selectedPoint === point.id ? null : point.id);
-        return;
+  // Effets
+  useEffect(() => {
+    // Vérifier si un dataset est spécifié dans l'URL
+    const datasetId = searchParams.get('dataset');
+    if (datasetId && datasets.length > 0) {
+      const dataset = datasets.find(d => d.id === datasetId);
+      if (dataset) {
+        setSelectedDataset(dataset);
+        setActiveTab('algorithm');
       }
     }
+  }, [datasets, searchParams]);
 
-    // Start dragging
-    setIsDragging(true);
-    setLastMouse({ x: e.clientX, y: e.clientY });
-    setCamera(prev => ({ ...prev, autoRotate: false }));
-  };
-
-  const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    
-    const deltaX = e.clientX - lastMouse.x;
-    const deltaY = e.clientY - lastMouse.y;
-    
-    setCamera(prev => ({
-      ...prev,
-      rotation: {
-        x: Math.max(-Math.PI/2, Math.min(Math.PI/2, prev.rotation.x + deltaY * 0.01)),
-        y: prev.rotation.y + deltaX * 0.01
-      }
-    }));
-    
-    setLastMouse({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleCanvasMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleCanvasWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setCamera(prev => ({
-      ...prev,
-      zoom: Math.max(0.5, Math.min(4, prev.zoom + (e.deltaY > 0 ? -0.1 : 0.1)))
-    }));
-  };
-
-  // Canvas resize
   useEffect(() => {
-    const resizeCanvas = () => {
-      if (!canvasRef.current) return;
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-      canvas.style.width = rect.width + 'px';
-      canvas.style.height = rect.height + 'px';
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    // Mettre à jour les données de visualisation quand les résultats ML arrivent
+    if (taskResults) {
+      setMLResults(taskResults);
+      setVisualizationData(taskResults.results.processed_data);
+      
+      // Extraire les informations de clusters si disponibles
+      if (taskResults.results.metadata.cluster_centers) {
+        const clusterInfo: ClusterInfo[] = taskResults.results.metadata.cluster_centers.map((center, i) => ({
+          id: i,
+          label: `Cluster ${i + 1}`,
+          color: `hsl(${(i * 360) / taskResults.results.metadata.cluster_centers!.length}, 70%, 60%)`,
+          count: taskResults.results.processed_data.filter(p => p.cluster === i).length,
+          centroid: center as [number, number, number],
+          variance: 0, // À calculer si nécessaire
+          density: 0,  // À calculer si nécessaire
+        }));
+        setClusters(clusterInfo);
+      }
+    }
+  }, [taskResults]);
+
+  // Handlers
+  const handleDatasetSelect = (datasetId: string) => {
+    const dataset = datasets.find(d => d.id === datasetId);
+    if (dataset) {
+      setSelectedDataset(dataset);
+      setActiveTab('algorithm');
+    }
+  };
+
+  const handleAlgorithmSelect = (algorithmId: string) => {
+    const algorithm = algorithms.find(a => a.id === algorithmId);
+    if (algorithm) {
+      setMLConfig(prev => ({
+        ...prev,
+        selectedAlgorithm: algorithmId,
+        parameters: Object.keys(algorithm.parameters).reduce((acc, key) => {
+          acc[key] = algorithm.parameters[key].default;
+          return acc;
+        }, {} as Record<string, any>)
+      }));
+    }
+  };
+
+  const handleStartProcessing = () => {
+    if (!selectedDataset || !mlConfig.selectedAlgorithm) {
+      toast({
+        title: "Configuration incomplète",
+        description: "Veuillez sélectionner un dataset et un algorithme",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const request: MLProcessRequest = {
+      algorithm_id: mlConfig.selectedAlgorithm,
+      parameters: {
+        ...mlConfig.parameters,
+        ...mlConfig.visualizationSettings
       }
     };
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, []);
+    processMutation.mutate({ datasetId: selectedDataset.id, request });
+  };
+
+  const handlePointClick = (point: DataPoint) => {
+    setSelectedPoint(point);
+  };
+
+  const handleVisualizationSettingChange = (key: keyof VisualizationConfig, value: any) => {
+    setMLConfig(prev => ({
+      ...prev,
+      visualizationSettings: {
+        ...prev.visualizationSettings,
+        [key]: value
+      }
+    }));
+  };
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
-        <Card className="p-8 bg-black/40 backdrop-blur-md border-white/10">
-          <h2 className="text-2xl font-bold text-white mb-4">Accès requis</h2>
-          <p className="text-gray-300 mb-6">Connectez-vous pour accéder à la visualisation 3D</p>
-          <Button onClick={() => window.location.href = '/api/login'}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center text-white"
+        >
+          <Brain className="w-16 h-16 mx-auto mb-4 text-cyan-400" />
+          <h2 className="text-2xl font-bold mb-2">Authentification requise</h2>
+          <p className="text-gray-300 mb-6">Connectez-vous pour accéder à la visualisation 3D intelligente</p>
+          <Button onClick={() => window.location.href = '/'} className="bg-gradient-to-r from-cyan-500 to-purple-500">
             Se connecter
           </Button>
-        </Card>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
-      {/* Header */}
-      <div className="bg-black/20 backdrop-blur-sm border-b border-white/10 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Data Mirage Pro</h1>
-            <p className="text-gray-300 text-sm">Visualisation 3D intelligente de données</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-400">
-              {(user as any)?.email || 'Utilisateur'}
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 text-white">
+      {/* Navigation Header */}
+      <motion.nav 
+        className="p-4 flex justify-between items-center backdrop-blur-sm bg-black/20 border-b border-white/10"
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+      >
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2">
+            <Brain className="w-8 h-8 text-cyan-400" />
+            <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              Data Mirage Pro
             </span>
+          </div>
+          
+          <div className="flex items-center space-x-1">
             <Button 
-              variant="outline" 
+              variant="ghost" 
               size="sm"
-              onClick={() => window.location.href = '/api/logout'}
-              className="border-white/20 text-white hover:bg-white/10"
+              onClick={() => window.location.href = '/dashboard'}
+              className="text-gray-300 hover:text-white"
             >
-              Déconnexion
+              <Eye className="w-4 h-4 mr-2" />
+              Visualisation
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => window.location.href = '/datasets'}
+              className="text-gray-300 hover:text-white"
+            >
+              <Database className="w-4 h-4 mr-2" />
+              Datasets
             </Button>
           </div>
         </div>
-      </div>
-
-      <div className="flex h-[calc(100vh-88px)]">
-        {/* Side Panel */}
-        <motion.div 
-          className="w-80 bg-black/30 backdrop-blur-md border-r border-white/10 p-6 overflow-y-auto"
-          initial={{ x: -320 }}
-          animate={{ x: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          {/* Upload Section */}
-          <Card className="mb-6 bg-white/5 border-white/10">
-            <div className="p-4">
-              <h3 className="text-lg font-semibold text-white mb-4">📊 Importer des données</h3>
-              
-              <input
-                type="file"
-                accept=".csv,.json"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadMutation.mutate(file);
-                }}
-                className="hidden"
-                id="file-upload"
-              />
-              <label htmlFor="file-upload">
-                <Button 
-                  className="w-full mb-4 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600"
-                  disabled={uploadMutation.isPending}
-                  asChild
-                >
-                  <span>
-                    <Upload className="w-4 h-4 mr-2" />
-                    {uploadMutation.isPending ? 'Upload...' : 'Choisir un fichier'}
-                  </span>
-                </Button>
-              </label>
-
-              {/* Dataset Selection */}
-              {datasets.length > 0 && (
-                <div>
-                  <label className="block text-sm text-gray-300 mb-2">Datasets existants</label>
-                  <Select 
-                    onValueChange={(value) => {
-                      const dataset = datasets.find((d: Dataset) => d.id === value);
-                      if (dataset) {
-                        setSelectedDataset(dataset);
-                        processDataset(dataset.id);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="bg-black/20 border-white/20 text-white">
-                      <SelectValue placeholder="Sélectionner..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {datasets.map((dataset: Dataset) => (
-                        <SelectItem key={dataset.id} value={dataset.id}>
-                          {dataset.name} ({dataset.rowCount} lignes)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* ML Configuration */}
-          <Card className="mb-6 bg-white/5 border-white/10">
-            <div className="p-4">
-              <h3 className="text-lg font-semibold text-white mb-4">🤖 Configuration ML</h3>
-              
-              {/* Auto Clustering Toggle */}
-              <div className="mb-4 p-3 bg-black/20 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-white">
-                    Clusters automatiques
-                  </label>
-                  <label className="inline-flex items-center">
-                    <input
-                      type="checkbox"
-                      className="form-checkbox h-5 w-5 text-cyan-600"
-                      checked={mlConfig.autoCluster}
-                      onChange={(e) => 
-                        setMLConfig(prev => ({ ...prev, autoCluster: e.target.checked }))
-                      }
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Détection automatique du nombre optimal de groupes
-                </p>
-              </div>
-
-              {/* Reduction Method */}
-              <div className="mb-4">
-                <label className="block text-sm text-gray-300 mb-2">Réduction dimensionnelle</label>
-                <Select 
-                  value={mlConfig.reductionMethod}
-                  onValueChange={(value: 'tsne' | 'umap' | 'pca') => 
-                    setMLConfig(prev => ({ ...prev, reductionMethod: value }))
-                  }
-                >
-                  <SelectTrigger className="bg-black/20 border-white/20 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tsne">t-SNE (Groupes complexes)</SelectItem>
-                    <SelectItem value="umap">UMAP (Rapide)</SelectItem>
-                    <SelectItem value="pca">PCA (Simple)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Clustering Method */}
-              <div className="mb-4">
-                <label className="block text-sm text-gray-300 mb-2">Méthode de clustering</label>
-                <Select 
-                  value={mlConfig.clusteringMethod}
-                  onValueChange={(value: 'kmeans' | 'dbscan') => 
-                    setMLConfig(prev => ({ ...prev, clusteringMethod: value }))
-                  }
-                >
-                  <SelectTrigger className="bg-black/20 border-white/20 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="kmeans">K-Means (Équilibrés)</SelectItem>
-                    <SelectItem value="dbscan">DBSCAN (Densité)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Anomaly Detection */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-white">
-                  Détecter les anomalies
-                </label>
-                <label className="inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    className="form-checkbox h-5 w-5 text-red-600"
-                    checked={mlConfig.detectAnomalies}
-                    onChange={(e) => 
-                      setMLConfig(prev => ({ ...prev, detectAnomalies: e.target.checked }))
-                    }
-                  />
-                </label>
-              </div>
-
-              {/* Process Button */}
-              {selectedDataset && (
-                <Button 
-                  className="w-full mt-4 bg-green-600 hover:bg-green-700"
-                  onClick={() => processDataset(selectedDataset.id)}
-                  disabled={isProcessing}
-                >
-                  <Play className="w-4 h-4 mr-2" />
-                  {isProcessing ? 'Traitement...' : 'Analyser'}
-                </Button>
-              )}
-            </div>
-          </Card>
-
-          {/* Stats */}
-          {processingResult && (
-            <Card className="bg-white/5 border-white/10">
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-white mb-4">📈 Statistiques</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Points:</span>
-                    <span className="text-cyan-400 font-semibold">
-                      {processingResult.points.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Clusters:</span>
-                    <span className="text-green-400 font-semibold">
-                      {processingResult.clusters.length}
-                      {processingResult.optimalClusters && (
-                        <span className="text-xs text-gray-400 ml-1">
-                          (optimal: {processingResult.optimalClusters})
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Anomalies:</span>
-                    <span className="text-red-400 font-semibold">
-                      {processingResult.anomalies.length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+        
+        <div className="flex items-center space-x-4">
+          {isConnected && (
+            <Badge variant="secondary" className="bg-green-500/20 text-green-300 border-green-500/30">
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse" />
+              Connected
+            </Badge>
           )}
-        </motion.div>
-
-        {/* Main Visualization */}
-        <div className="flex-1 flex flex-col">
-          {/* Canvas Controls */}
-          <div className="bg-black/10 backdrop-blur-sm border-b border-white/10 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <h2 className="text-lg font-semibold text-white">Visualisation 3D</h2>
-                {selectedDataset && (
-                  <span className="text-sm text-gray-300">
-                    Dataset: <span className="text-cyan-400">{selectedDataset.name}</span>
-                  </span>
-                )}
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => setCamera(prev => ({ ...prev, autoRotate: !prev.autoRotate }))}
-                >
-                  {camera.autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => setCamera({ rotation: { x: 0.3, y: 0 }, zoom: 1.5, autoRotate: true })}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => setCamera(prev => ({ ...prev, zoom: Math.min(4, prev.zoom * 1.2) }))}
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => setCamera(prev => ({ ...prev, zoom: Math.max(0.5, prev.zoom / 1.2) }))}
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+          
+          <div className="flex items-center space-x-2 text-sm text-gray-300">
+            <User className="w-4 h-4" />
+            <span>{user?.name || user?.email}</span>
           </div>
+          
+          <Button 
+            onClick={logout}
+            variant="ghost"
+            size="sm"
+            className="text-gray-300 hover:text-red-400"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
+      </motion.nav>
 
-          {/* Canvas Area */}
-          <div className="flex-1 relative">
-            {processingResult ? (
-              <>
-                <canvas
-                  ref={canvasRef}
-                  className={`w-full h-full ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                  onMouseDown={handleCanvasMouseDown}
-                  onMouseMove={handleCanvasMouseMove}
-                  onMouseUp={handleCanvasMouseUp}
-                  onMouseLeave={handleCanvasMouseUp}
-                  onWheel={handleCanvasWheel}
-                />
-                
-                {/* Camera Info */}
-                <motion.div 
-                  className="absolute top-4 right-4 bg-black/60 backdrop-blur-md rounded-lg p-3 border border-white/10"
-                  initial={{ opacity: 0, x: 50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                >
-                  <div className="text-sm text-white space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Zoom:</span>
-                      <span className="text-blue-400">{(camera.zoom * 100).toFixed(0)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Rotation:</span>
-                      <span className="text-purple-400">
-                        {camera.autoRotate ? 'AUTO' : 'MANUEL'}
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Point Info Panel */}
-                <AnimatePresence>
-                  {selectedPoint && (() => {
-                    const point = processingResult.points.find(p => p.id === selectedPoint);
-                    return point ? (
+      <div className="flex h-[calc(100vh-80px)]">
+        {/* Sidebar gauche - Configuration */}
+        <motion.div 
+          className="w-80 bg-black/20 backdrop-blur-sm border-r border-white/10 overflow-y-auto"
+          initial={{ x: -320, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <div className="p-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-gray-800/50">
+                <TabsTrigger value="dataset" className="text-xs">Dataset</TabsTrigger>
+                <TabsTrigger value="algorithm" className="text-xs">Algorithm</TabsTrigger>
+                <TabsTrigger value="results" className="text-xs">Results</TabsTrigger>
+              </TabsList>
+              
+              {/* Tab Dataset */}
+              <TabsContent value="dataset" className="space-y-4 mt-4">
+                <Card className="bg-gray-800/30 border-gray-700/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Database className="w-4 h-4 text-cyan-400" />
+                      Sélectionner un Dataset
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Select onValueChange={handleDatasetSelect} value={selectedDataset?.id || ''}>
+                      <SelectTrigger className="bg-gray-700/50 border-gray-600">
+                        <SelectValue placeholder="Choisir un dataset..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {datasets.map((dataset) => (
+                          <SelectItem key={dataset.id} value={dataset.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{dataset.name}</span>
+                              <span className="text-xs text-gray-400">
+                                {dataset.row_count} rows × {dataset.column_count} cols
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {selectedDataset && (
                       <motion.div 
-                        className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md rounded-lg p-4 border border-cyan-400/30 max-w-sm"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ duration: 0.3 }}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/20"
                       >
-                        <div className="text-white">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-lg font-semibold text-cyan-400">Point Data</h4>
-                            <button
-                              onClick={() => setSelectedPoint(null)}
-                              className="text-gray-400 hover:text-white w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10"
-                            >
-                              ×
-                            </button>
-                          </div>
-                          
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">ID:</span>
-                              <span className="text-white font-mono">{point.id}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Cluster:</span>
-                              <span className="text-green-400 font-semibold">{point.cluster}</span>
-                            </div>
-                            {point.isAnomaly && (
-                              <div className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs border border-red-500/30">
-                                🚨 Anomalie détectée
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="mt-3 pt-3 border-t border-white/10">
-                            <h5 className="text-xs font-semibold text-gray-400 mb-2">DONNÉES ORIGINALES</h5>
-                            <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
-                              {Object.entries(point.originalData || {}).slice(0, 8).map(([key, value]) => (
-                                <div key={key} className="flex justify-between">
-                                  <span className="text-gray-400 truncate">{key}:</span>
-                                  <span className="text-white ml-2 truncate">{String(value)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                        <h4 className="font-medium text-cyan-300 mb-2">{selectedDataset.name}</h4>
+                        <div className="text-xs text-gray-300 space-y-1">
+                          <div>📊 {selectedDataset.row_count.toLocaleString()} lignes</div>
+                          <div>📈 {selectedDataset.column_count} colonnes</div>
+                          <div>💾 {(selectedDataset.size / 1024 / 1024).toFixed(2)} MB</div>
+                          <div>📅 {new Date(selectedDataset.created_at).toLocaleDateString()}</div>
                         </div>
                       </motion.div>
-                    ) : null;
-                  })()}
-                </AnimatePresence>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              
+              {/* Tab Algorithm */}
+              <TabsContent value="algorithm" className="space-y-4 mt-4">
+                <Card className="bg-gray-800/30 border-gray-700/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-purple-400" />
+                      Algorithme ML
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Select onValueChange={handleAlgorithmSelect} value={mlConfig.selectedAlgorithm}>
+                      <SelectTrigger className="bg-gray-700/50 border-gray-600">
+                        <SelectValue placeholder="Choisir un algorithme..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {algorithms.map((algo) => (
+                          <SelectItem key={algo.id} value={algo.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{algo.name}</span>
+                              <span className="text-xs text-gray-400 capitalize">{algo.category}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* Paramètres de l'algorithme */}
+                    {mlConfig.selectedAlgorithm && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="space-y-3"
+                      >
+                        <Separator className="bg-gray-600/50" />
+                        <h5 className="text-sm font-medium text-gray-300">Paramètres</h5>
+                        
+                        {/* Configuration de visualisation */}
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">Méthode de réduction</label>
+                            <Select 
+                              value={mlConfig.visualizationSettings.reduction_method}
+                              onValueChange={(value: any) => handleVisualizationSettingChange('reduction_method', value)}
+                            >
+                              <SelectTrigger className="bg-gray-700/50 border-gray-600 h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pca">PCA</SelectItem>
+                                <SelectItem value="tsne">t-SNE</SelectItem>
+                                <SelectItem value="umap">UMAP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs text-gray-400">Détection d'anomalies</label>
+                            <Switch 
+                              checked={mlConfig.visualizationSettings.detect_anomalies}
+                              onCheckedChange={(checked) => handleVisualizationSettingChange('detect_anomalies', checked)}
+                            />
+                          </div>
+                          
+                          <Button
+                            onClick={handleStartProcessing}
+                            disabled={!selectedDataset || !mlConfig.selectedAlgorithm || isProcessing}
+                            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                          >
+                            {isProcessing ? (
+                              <>
+                                <Cpu className="w-4 h-4 mr-2 animate-spin" />
+                                Traitement...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4 mr-2" />
+                                Démarrer l'analyse
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              
+              {/* Tab Results */}
+              <TabsContent value="results" className="space-y-4 mt-4">
+                <Card className="bg-gray-800/30 border-gray-700/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-green-400" />
+                      Résultats ML
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {currentTask && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-400">Statut</span>
+                          <Badge 
+                            variant={currentTask.status === 'completed' ? 'default' : 'secondary'}
+                            className={
+                              currentTask.status === 'completed' ? 'bg-green-500/20 text-green-300' :
+                              currentTask.status === 'failed' ? 'bg-red-500/20 text-red-300' :
+                              'bg-yellow-500/20 text-yellow-300'
+                            }
+                          >
+                            {currentTask.status}
+                          </Badge>
+                        </div>
+                        
+                        {currentTask.progress !== undefined && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Progrès</span>
+                              <span className="text-cyan-300">{currentTask.progress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <motion.div 
+                                className="bg-gradient-to-r from-cyan-500 to-purple-500 h-2 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${currentTask.progress || 0}%` }}
+                                transition={{ duration: 0.5 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {mlResults && (
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="space-y-3"
+                      >
+                        <Separator className="bg-gray-600/50" />
+                        
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-gray-700/30 p-2 rounded">
+                            <div className="text-gray-400">Points</div>
+                            <div className="font-medium">{visualizationData.length}</div>
+                          </div>
+                          <div className="bg-gray-700/30 p-2 rounded">
+                            <div className="text-gray-400">Clusters</div>
+                            <div className="font-medium">{clusters.length}</div>
+                          </div>
+                        </div>
+                        
+                        {clusters.length > 0 && (
+                          <div className="space-y-2">
+                            <h6 className="text-xs font-medium text-gray-300">Clusters</h6>
+                            {clusters.map((cluster) => (
+                              <div key={cluster.id} className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full" 
+                                    style={{ backgroundColor: cluster.color }}
+                                  />
+                                  <span>{cluster.label}</span>
+                                </div>
+                                <span className="text-gray-400">{cluster.count} pts</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </motion.div>
 
-                {/* Controls Info */}
-                <motion.div 
-                  className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md rounded-lg p-3 border border-white/10"
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <div className="text-xs text-gray-300 space-y-1">
-                    <div>🖱️ Glisser pour tourner</div>
-                    <div>🔄 Molette pour zoomer</div>
-                    <div>👆 Cliquer sur les points</div>
-                    <div>✨ Optimisé pour iPhone</div>
-                  </div>
-                </motion.div>
-              </>
+        {/* Zone principale - Visualisation 3D */}
+        <div className="flex-1 relative">
+          <motion.div 
+            className="h-full"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            {visualizationData.length > 0 ? (
+              <Canvas3D
+                data={visualizationData}
+                clusters={clusters}
+                config={mlConfig.visualizationSettings}
+                selectedPoint={selectedPoint}
+                onPointClick={handlePointClick}
+                className="w-full h-full"
+              />
             ) : (
               <div className="flex items-center justify-center h-full">
                 <motion.div 
-                  className="text-center max-w-md"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
+                  className="text-center"
                 >
-                  {isProcessing ? (
-                    <>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        className="text-6xl mb-6"
-                      >
-                        ⚙️
-                      </motion.div>
-                      <h3 className="text-2xl font-semibold mb-4 text-white">
-                        Analyse en cours...
-                      </h3>
-                      <p className="text-gray-300">
-                        Traitement ML et génération de la visualisation 3D
-                      </p>
-                    </>
+                  <Layers className="w-24 h-24 text-gray-600 mx-auto mb-6" />
+                  <h3 className="text-2xl font-bold mb-2 text-gray-300">Visualisation 3D Intelligente</h3>
+                  <p className="text-gray-400 mb-6 max-w-md">
+                    Sélectionnez un dataset et lancez l'analyse ML pour voir vos données prendre vie en 3D
+                  </p>
+                  
+                  {!selectedDataset ? (
+                    <Button 
+                      onClick={() => setActiveTab('dataset')}
+                      className="bg-gradient-to-r from-cyan-500 to-purple-500"
+                    >
+                      <Database className="w-4 h-4 mr-2" />
+                      Choisir un dataset
+                    </Button>
+                  ) : !mlConfig.selectedAlgorithm ? (
+                    <Button 
+                      onClick={() => setActiveTab('algorithm')}
+                      className="bg-gradient-to-r from-purple-500 to-pink-500"
+                    >
+                      <Brain className="w-4 h-4 mr-2" />
+                      Choisir un algorithme
+                    </Button>
                   ) : (
-                    <>
-                      <motion.div
-                        animate={{ 
-                          scale: [1, 1.1, 1],
-                          rotate: [0, 180, 360] 
-                        }}
-                        transition={{ 
-                          duration: 4, 
-                          repeat: Infinity, 
-                          ease: "easeInOut" 
-                        }}
-                        className="text-6xl mb-6 text-cyan-400"
-                      >
-                        🌌
-                      </motion.div>
-                      <h3 className="text-2xl font-semibold mb-4 text-white">
-                        Prêt pour l'exploration
-                      </h3>
-                      <p className="text-gray-300 leading-relaxed">
-                        Importez un dataset CSV ou JSON pour découvrir votre univers de données en 3D avec clustering automatique
-                      </p>
-                    </>
+                    <Button 
+                      onClick={handleStartProcessing}
+                      disabled={isProcessing}
+                      className="bg-gradient-to-r from-green-500 to-blue-500"
+                    >
+                      <Target className="w-4 h-4 mr-2" />
+                      Lancer l'analyse
+                    </Button>
                   )}
                 </motion.div>
               </div>
             )}
-          </div>
+          </motion.div>
+          
+          {/* Panel d'informations sur le point sélectionné */}
+          <AnimatePresence>
+            {selectedPoint && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="absolute top-4 right-4 w-80"
+              >
+                <Card className="bg-black/80 backdrop-blur-sm border-cyan-500/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <Target className="w-4 h-4 text-cyan-400" />
+                        Point sélectionné
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setSelectedPoint(null)}
+                        className="h-6 w-6 p-0"
+                      >
+                        ×
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">ID:</span>
+                        <span className="font-mono">{selectedPoint.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Position:</span>
+                        <span className="font-mono">
+                          ({selectedPoint.x.toFixed(2)}, {selectedPoint.y.toFixed(2)}, {selectedPoint.z.toFixed(2)})
+                        </span>
+                      </div>
+                      {selectedPoint.cluster !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Cluster:</span>
+                          <span>{selectedPoint.cluster}</span>
+                        </div>
+                      )}
+                      {selectedPoint.anomaly_score !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Anomalie:</span>
+                          <span className={selectedPoint.anomaly_score > 0.5 ? 'text-red-400' : 'text-green-400'}>
+                            {(selectedPoint.anomaly_score * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      
+                      {selectedPoint.original_data && (
+                        <div className="mt-3">
+                          <h6 className="text-gray-400 mb-1">Données originales:</h6>
+                          <div className="max-h-32 overflow-y-auto bg-gray-800/50 p-2 rounded text-xs">
+                            {Object.entries(selectedPoint.original_data).slice(0, 5).map(([key, value]) => (
+                              <div key={key} className="flex justify-between">
+                                <span className="text-gray-400">{key}:</span>
+                                <span className="font-mono">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
