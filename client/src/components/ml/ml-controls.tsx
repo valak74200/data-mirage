@@ -16,10 +16,12 @@ interface MLControlsProps {
 export default function MLControls({ dataset, onProcessingComplete }: MLControlsProps) {
   const [processing, setProcessing] = useState(false);
   const [config, setConfig] = useState({
-    algorithm: "tsne",
-    clusters: 3,
-    iterations: 1000,
-    perplexity: 30,
+    reductionMethod: "tsne" as "tsne" | "umap",
+    clusteringMethod: "kmeans" as "kmeans" | "dbscan",
+    numClusters: 3,
+    detectAnomalies: false,
+    colorColumn: undefined as string | undefined,
+    sizeColumn: undefined as string | undefined,
   });
   const { toast } = useToast();
 
@@ -28,15 +30,12 @@ export default function MLControls({ dataset, onProcessingComplete }: MLControls
     
     setProcessing(true);
     try {
-      const response = await fetch("/api/process", {
+      const response = await fetch(`/api/process/${dataset.id}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          datasetId: dataset.id,
-          config,
-        }),
+        body: JSON.stringify(config),
       });
 
       if (!response.ok) {
@@ -74,25 +73,24 @@ export default function MLControls({ dataset, onProcessingComplete }: MLControls
         <CardContent className="space-y-4">
           <div>
             <Label className="text-xs text-gray-400 mb-2 block">TYPE D'ALGORITHME</Label>
-            <Select value={config.algorithm} onValueChange={(value) => setConfig({...config, algorithm: value})}>
+            <Select value={config.reductionMethod} onValueChange={(value: "tsne" | "umap") => setConfig({...config, reductionMethod: value})}>
               <SelectTrigger className="bg-black/20 border-white/20 text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-gray-800 border-white/20">
                 <SelectItem value="tsne">t-SNE (recommandé)</SelectItem>
                 <SelectItem value="umap">UMAP</SelectItem>
-                <SelectItem value="pca">PCA</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div>
             <Label className="text-xs text-gray-400 mb-2 block">
-              NOMBRE DE CLUSTERS: {config.clusters}
+              NOMBRE DE CLUSTERS: {config.numClusters}
             </Label>
             <Slider
-              value={[config.clusters]}
-              onValueChange={(value) => setConfig({...config, clusters: value[0]})}
+              value={[config.numClusters]}
+              onValueChange={(value) => setConfig({...config, numClusters: value[0]})}
               max={10}
               min={2}
               step={1}
@@ -100,21 +98,31 @@ export default function MLControls({ dataset, onProcessingComplete }: MLControls
             />
           </div>
 
-          {config.algorithm === "tsne" && (
-            <div>
-              <Label className="text-xs text-gray-400 mb-2 block">
-                PERPLEXITÉ: {config.perplexity}
-              </Label>
-              <Slider
-                value={[config.perplexity]}
-                onValueChange={(value) => setConfig({...config, perplexity: value[0]})}
-                max={50}
-                min={5}
-                step={5}
-                className="w-full"
-              />
-            </div>
-          )}
+          <div>
+            <Label className="text-xs text-gray-400 mb-2 block">MÉTHODE DE CLUSTERING</Label>
+            <Select value={config.clusteringMethod} onValueChange={(value: "kmeans" | "dbscan") => setConfig({...config, clusteringMethod: value})}>
+              <SelectTrigger className="bg-black/20 border-white/20 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-white/20">
+                <SelectItem value="kmeans">K-Means</SelectItem>
+                <SelectItem value="dbscan">DBSCAN</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="detectAnomalies"
+              checked={config.detectAnomalies}
+              onChange={(e) => setConfig({...config, detectAnomalies: e.target.checked})}
+              className="rounded border-white/20 bg-black/20 focus:ring-purple-400"
+            />
+            <Label htmlFor="detectAnomalies" className="text-xs text-gray-400">
+              Détecter les anomalies
+            </Label>
+          </div>
         </CardContent>
       </Card>
 
@@ -160,7 +168,8 @@ export default function MLControls({ dataset, onProcessingComplete }: MLControls
       <div className="text-xs text-gray-500 space-y-1 bg-black/20 p-3 rounded-lg">
         <p><strong className="text-cyan-400">t-SNE:</strong> Idéal pour révéler des clusters complexes</p>
         <p><strong className="text-purple-400">UMAP:</strong> Plus rapide, préserve la structure globale</p>
-        <p><strong className="text-green-400">PCA:</strong> Simple et rapide pour des données linéaires</p>
+        <p><strong className="text-green-400">K-Means:</strong> Groupes de taille équilibrée</p>
+        <p><strong className="text-orange-400">DBSCAN:</strong> Groupes de densité variable</p>
       </div>
     </div>
   );

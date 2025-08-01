@@ -167,6 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Dataset not found' });
       }
 
+      console.log('Request body:', req.body);
       const config = mlConfigSchema.parse(req.body);
       
       // Broadcast processing start to connected WebSocket clients
