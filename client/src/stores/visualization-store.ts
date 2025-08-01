@@ -53,6 +53,7 @@ export function useVisualizationStore() {
       const response = await apiRequest('POST', '/api/datasets', payload);
       const dataset = await response.json();
       
+      console.log('Dataset uploaded successfully:', dataset);
       setState(prev => ({ ...prev, currentDataset: dataset, isUploading: false }));
       return dataset;
     } catch (error) {
@@ -93,6 +94,9 @@ export function useVisualizationStore() {
   const setCameraReset = useCallback((reset: boolean) => {
     setState(prev => ({ ...prev, cameraReset: reset }));
   }, []);
+
+  // Debug logs
+  console.log('Store state - currentDataset:', state.currentDataset);
 
   return {
     ...state,

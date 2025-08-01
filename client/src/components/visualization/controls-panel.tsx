@@ -29,6 +29,10 @@ export default function ControlsPanel() {
   };
 
   const availableColumns = (currentDataset?.metadata as any)?.columns || [];
+  
+  // Debug logs
+  console.log('ControlsPanel - currentDataset:', currentDataset);
+  console.log('ControlsPanel - availableColumns:', availableColumns);
 
   return (
     <div className="space-y-8">
