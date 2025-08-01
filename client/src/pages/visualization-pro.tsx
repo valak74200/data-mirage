@@ -178,75 +178,56 @@ export default function VisualizationPro() {
     return { x: projectedX, y: projectedY, size: size, depth: finalZ };
   }, [camera]);
 
-  // Helper function for Level of Detail - show fewer points when zoomed out
+  // Helper function for Level of Detail - aggressive filtering for clarity
   const filterPointsByLOD = useCallback((points: any[]) => {
     const zoomFactor = camera.zoom;
     
-    if (zoomFactor < 0.4) {
-      // Very zoomed out - show only every 3rd point
-      return points.filter((_, index) => index % 3 === 0);
+    if (zoomFactor < 0.3) {
+      // Very zoomed out - show only every 10th point
+      return points.filter((_, index) => index % 10 === 0);
+    } else if (zoomFactor < 0.5) {
+      // Medium-far zoom - show every 5th point
+      return points.filter((_, index) => index % 5 === 0);
     } else if (zoomFactor < 0.8) {
-      // Medium zoom - show every 2nd point
+      // Medium zoom - show every 3rd point
+      return points.filter((_, index) => index % 3 === 0);
+    } else if (zoomFactor < 1.2) {
+      // Close zoom - show every 2nd point
       return points.filter((_, index) => index % 2 === 0);
     } else {
-      // Close zoom - show all points
+      // Very close zoom - show all points
       return points;
     }
   }, [camera.zoom]);
 
-  // Helper function to draw 3D reference grid
+  // Helper function to draw minimal 3D reference grid
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.strokeStyle = '#ffffff08';
+    // Only draw main axes, no grid lines for cleaner look
     ctx.lineWidth = 1;
+    const axisLength = 400;
     
-    const gridRange = 300;
-    const gridStep = 100;
-    
-    // XY plane grid
-    for (let i = -gridRange; i <= gridRange; i += gridStep) {
-      // X lines
-      const start1 = project3D(i, -gridRange, 0);
-      const end1 = project3D(i, gridRange, 0);
-      ctx.beginPath();
-      ctx.moveTo(start1.x, start1.y);
-      ctx.lineTo(end1.x, end1.y);
-      ctx.stroke();
-      
-      // Y lines
-      const start2 = project3D(-gridRange, i, 0);
-      const end2 = project3D(gridRange, i, 0);
-      ctx.beginPath();
-      ctx.moveTo(start2.x, start2.y);
-      ctx.lineTo(end2.x, end2.y);
-      ctx.stroke();
-    }
-    
-    // Main axes with stronger lines
-    ctx.strokeStyle = '#ffffff20';
-    ctx.lineWidth = 2;
-    
-    // X axis (red tint)
-    ctx.strokeStyle = '#ff404020';
-    const xStart = project3D(-gridRange, 0, 0);
-    const xEnd = project3D(gridRange, 0, 0);
+    // X axis (subtle red)
+    ctx.strokeStyle = '#ff000015';
+    const xStart = project3D(-axisLength, 0, 0);
+    const xEnd = project3D(axisLength, 0, 0);
     ctx.beginPath();
     ctx.moveTo(xStart.x, xStart.y);
     ctx.lineTo(xEnd.x, xEnd.y);
     ctx.stroke();
     
-    // Y axis (green tint)
-    ctx.strokeStyle = '#40ff4020';
-    const yStart = project3D(0, -gridRange, 0);
-    const yEnd = project3D(0, gridRange, 0);
+    // Y axis (subtle green)
+    ctx.strokeStyle = '#00ff0015';
+    const yStart = project3D(0, -axisLength, 0);
+    const yEnd = project3D(0, axisLength, 0);
     ctx.beginPath();
     ctx.moveTo(yStart.x, yStart.y);
     ctx.lineTo(yEnd.x, yEnd.y);
     ctx.stroke();
     
-    // Z axis (blue tint)
-    ctx.strokeStyle = '#4040ff20';
-    const zStart = project3D(0, 0, -gridRange);
-    const zEnd = project3D(0, 0, gridRange);
+    // Z axis (subtle blue)
+    ctx.strokeStyle = '#0000ff15';
+    const zStart = project3D(0, 0, -axisLength);
+    const zEnd = project3D(0, 0, axisLength);
     ctx.beginPath();
     ctx.moveTo(zStart.x, zStart.y);
     ctx.lineTo(zEnd.x, zEnd.y);
