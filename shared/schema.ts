@@ -67,7 +67,7 @@ export type Visualization = typeof visualizations.$inferSelect;
 export const mlConfigSchema = z.object({
   reductionMethod: z.enum(['tsne', 'umap']),
   clusteringMethod: z.enum(['kmeans', 'dbscan']),
-  numClusters: z.number().min(2).max(20),
+  numClusters: z.number().min(2).max(20).optional(),
   colorColumn: z.string().optional(),
   sizeColumn: z.string().optional(),
   detectAnomalies: z.boolean(),
