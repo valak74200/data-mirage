@@ -56,7 +56,7 @@ export default function VisualizationPro() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [camera, setCamera] = useState({
     rotation: { x: 0.3, y: 0 },
-    zoom: 0.5, // Much smaller zoom for wide overview
+    zoom: 0.7, // Better initial zoom for structure visibility
     autoRotate: true
   });
   const [isDragging, setIsDragging] = useState(false);
@@ -173,10 +173,120 @@ export default function VisualizationPro() {
     // Project to 2D
     const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
     const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = Math.max(1, (perspective) / (perspective + finalZ) * 3);
+    const size = Math.max(2, (perspective) / (perspective + finalZ) * 6);
     
     return { x: projectedX, y: projectedY, size: size, depth: finalZ };
   }, [camera]);
+
+  // Helper function for Level of Detail - show fewer points when zoomed out
+  const filterPointsByLOD = useCallback((points: any[]) => {
+    const zoomFactor = camera.zoom;
+    
+    if (zoomFactor < 0.4) {
+      // Very zoomed out - show only every 3rd point
+      return points.filter((_, index) => index % 3 === 0);
+    } else if (zoomFactor < 0.8) {
+      // Medium zoom - show every 2nd point
+      return points.filter((_, index) => index % 2 === 0);
+    } else {
+      // Close zoom - show all points
+      return points;
+    }
+  }, [camera.zoom]);
+
+  // Helper function to draw 3D reference grid
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    ctx.strokeStyle = '#ffffff08';
+    ctx.lineWidth = 1;
+    
+    const gridRange = 300;
+    const gridStep = 100;
+    
+    // XY plane grid
+    for (let i = -gridRange; i <= gridRange; i += gridStep) {
+      // X lines
+      const start1 = project3D(i, -gridRange, 0);
+      const end1 = project3D(i, gridRange, 0);
+      ctx.beginPath();
+      ctx.moveTo(start1.x, start1.y);
+      ctx.lineTo(end1.x, end1.y);
+      ctx.stroke();
+      
+      // Y lines
+      const start2 = project3D(-gridRange, i, 0);
+      const end2 = project3D(gridRange, i, 0);
+      ctx.beginPath();
+      ctx.moveTo(start2.x, start2.y);
+      ctx.lineTo(end2.x, end2.y);
+      ctx.stroke();
+    }
+    
+    // Main axes with stronger lines
+    ctx.strokeStyle = '#ffffff20';
+    ctx.lineWidth = 2;
+    
+    // X axis (red tint)
+    ctx.strokeStyle = '#ff404020';
+    const xStart = project3D(-gridRange, 0, 0);
+    const xEnd = project3D(gridRange, 0, 0);
+    ctx.beginPath();
+    ctx.moveTo(xStart.x, xStart.y);
+    ctx.lineTo(xEnd.x, xEnd.y);
+    ctx.stroke();
+    
+    // Y axis (green tint)
+    ctx.strokeStyle = '#40ff4020';
+    const yStart = project3D(0, -gridRange, 0);
+    const yEnd = project3D(0, gridRange, 0);
+    ctx.beginPath();
+    ctx.moveTo(yStart.x, yStart.y);
+    ctx.lineTo(yEnd.x, yEnd.y);
+    ctx.stroke();
+    
+    // Z axis (blue tint)
+    ctx.strokeStyle = '#4040ff20';
+    const zStart = project3D(0, 0, -gridRange);
+    const zEnd = project3D(0, 0, gridRange);
+    ctx.beginPath();
+    ctx.moveTo(zStart.x, zStart.y);
+    ctx.lineTo(zEnd.x, zEnd.y);
+    ctx.stroke();
+  }, [project3D]);
+
+  // Helper function to draw cluster regions
+  const drawClusterRegions = useCallback((ctx: CanvasRenderingContext2D, points: any[], clusters: any[]) => {
+    clusters.forEach(cluster => {
+      const clusterPoints = points.filter(p => p.cluster === cluster.id);
+      if (clusterPoints.length < 3) return;
+      
+      // Calculate cluster center
+      const centerX = clusterPoints.reduce((sum, p) => sum + p.x, 0) / clusterPoints.length;
+      const centerY = clusterPoints.reduce((sum, p) => sum + p.y, 0) / clusterPoints.length;
+      
+      // Find maximum distance to determine circle radius
+      const maxDist = Math.max(...clusterPoints.map(p => 
+        Math.sqrt(Math.pow(p.x - centerX, 2) + Math.pow(p.y - centerY, 2))
+      ));
+      
+      // Draw cluster circle
+      ctx.strokeStyle = cluster.color + '40';
+      ctx.fillStyle = cluster.color + '15';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, maxDist + 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw cluster label
+      ctx.fillStyle = cluster.color + 'CC';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Cluster ${cluster.id}`, centerX, centerY - maxDist - 30);
+    });
+  }, []);
 
   const drawVisualization = useCallback(() => {
     if (!canvasRef.current || !processingResult?.points) return;
@@ -193,8 +303,11 @@ export default function VisualizationPro() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Draw 3D reference grid first
+    drawGrid(ctx);
+    
     const points = processingResult.points;
-    const spread = 2.5; // Much larger spread for clear navigation
+    const spread = 2;
 
     // Project all points and sort by depth
     const projectedPoints = points.map(point => {
@@ -206,79 +319,87 @@ export default function VisualizationPro() {
       return { ...point, ...projected };
     }).sort((a, b) => (b.depth || 0) - (a.depth || 0));
 
-    // Optional cluster connections (very light)
-    if (processingResult.clusters && false) { // Disabled for clean navigation
-      ctx.globalAlpha = 0.05;
-      processingResult.clusters.forEach(cluster => {
-        const clusterPoints = projectedPoints.filter(p => p.cluster === cluster.id);
-        
-        if (clusterPoints.length > 1) {
-          ctx.strokeStyle = cluster.color;
-          ctx.lineWidth = 0.5;
-          
-          // Only connect very close points
-          clusterPoints.forEach((point, i) => {
-            const nearbyPoints = clusterPoints
-              .slice(i + 1, i + 2) // Only next point
-              .filter(other => {
-                const distance = Math.sqrt(
-                  Math.pow(point.position[0] - other.position[0], 2) +
-                  Math.pow(point.position[1] - other.position[1], 2) +
-                  Math.pow(point.position[2] - other.position[2], 2)
-                );
-                return distance < 1.5;
-              });
-            
-            nearbyPoints.forEach(nearbyPoint => {
-              ctx.beginPath();
-              ctx.moveTo(point.x, point.y);
-              ctx.lineTo(nearbyPoint.x, nearbyPoint.y);
-              ctx.stroke();
-            });
-          });
-        }
-      });
-      ctx.globalAlpha = 1;
+    // Apply Level of Detail filtering
+    const visiblePoints = filterPointsByLOD(projectedPoints);
+    
+    // Draw cluster regions
+    if (processingResult.clusters && camera.zoom > 0.3) {
+      drawClusterRegions(ctx, visiblePoints, processingResult.clusters);
     }
 
-    // Draw points
-    projectedPoints.forEach(point => {
+    // Draw points with proper depth and sizing
+    visiblePoints.forEach(point => {
       const isSelected = selectedPoint === point.id;
       const isAnomaly = point.isAnomaly;
       
-      // Anomaly indicator (minimal)
-      if (isAnomaly) {
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 1;
+      // Calculate size based on zoom and depth
+      const baseSize = Math.max(3, 8 * camera.zoom);
+      const depthFactor = Math.max(0.4, 1 - Math.abs(point.depth || 0) / 1500);
+      const finalSize = baseSize * depthFactor;
+      
+      // Point glow for depth perception
+      if (finalSize > 4 && camera.zoom > 0.6) {
+        const glowGradient = ctx.createRadialGradient(
+          point.x, point.y, 0,
+          point.x, point.y, finalSize * 1.5
+        );
+        glowGradient.addColorStop(0, point.color + '60');
+        glowGradient.addColorStop(1, point.color + '00');
+        ctx.fillStyle = glowGradient;
         ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size + 1, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.arc(point.x, point.y, finalSize * 1.5, 0, Math.PI * 2);
+        ctx.fill();
       }
       
-      // Selection highlight (minimal)
-      if (isSelected) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size + 2, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      
-      // Main point with minimal depth effect
-      const depthSize = point.size;
+      // Main point
       ctx.fillStyle = point.color;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, depthSize, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, finalSize, 0, Math.PI * 2);
       ctx.fill();
       
-      // Simple point border only
-      ctx.strokeStyle = '#00000020';
-      ctx.lineWidth = 0.5;
+      // Point border for definition
+      ctx.strokeStyle = '#00000040';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, depthSize, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, finalSize, 0, Math.PI * 2);
       ctx.stroke();
+      
+      // Selection highlight
+      if (isSelected) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, finalSize + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Pulsing outer ring
+        const pulse = finalSize + 8 + Math.sin(Date.now() * 0.01) * 3;
+        ctx.strokeStyle = '#ffffff60';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, pulse, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      // Anomaly indicator
+      if (isAnomaly) {
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, finalSize + 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     });
-  }, [processingResult, project3D, selectedPoint]);
+
+    // Draw depth info
+    ctx.fillStyle = '#ffffff40';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Points visibles: ${visiblePoints.length}/${points.length}`, 10, canvas.height - 40);
+    ctx.fillText(`Zoom: ${(camera.zoom * 100).toFixed(0)}%`, 10, canvas.height - 20);
+  }, [processingResult, project3D, selectedPoint, camera, drawGrid, drawClusterRegions, filterPointsByLOD]);
 
   // Animation loop
   useEffect(() => {
