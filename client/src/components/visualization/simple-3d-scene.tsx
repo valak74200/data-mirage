@@ -239,7 +239,7 @@ export default function Simple3DScene() {
     setZoom(prev => Math.max(0.3, Math.min(4, prev + e.deltaY * -0.002)));
   }, []);
 
-  if (!processingResult?.points) {
+  if (!processingResult?.points || processingResult.points.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-900">
         <div className="text-center">

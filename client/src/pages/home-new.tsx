@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVisualizationStore } from "@/stores/visualization-store";
 import { useIsMobile } from "@/hooks/use-mobile";
-import Simple3DScene from "@/components/visualization/simple-3d-scene";
+import ThreeJSScene from "@/components/visualization/three-js-scene";
 import SimpleControls from "@/components/visualization/simple-controls";
 
 export default function HomeNew() {
@@ -130,7 +130,7 @@ export default function HomeNew() {
 
         {/* 3D Visualization Area */}
         <div className="flex-1 relative">
-          <Simple3DScene />
+          <ThreeJSScene />
         </div>
       </div>
     </div>
