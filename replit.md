@@ -7,6 +7,10 @@ Data Mirage is a complete, production-ready web application that transforms tabu
 The application includes user authentication, personal dataset management, real-time ML processing, and an improved 3D visualization engine with clean, simple rendering optimized for mobile devices (iPhone). All explanations are provided in French for ML beginners.
 
 **Recent Major Updates (January 2025):**
+- ✅ **ARCHITECTURE MIGRATION: Node.js → Python Backend** (January 31, 2025)
+- ✅ Native ML processing with scikit-learn, pandas, numpy
+- ✅ Enhanced RAG service with proper ML algorithms
+- ✅ FastAPI backend with uvicorn server on port 8001  
 - ✅ Complete authentication system with Replit Auth integration
 - ✅ Multi-page architecture with landing page, authenticated home, and datasets management
 - ✅ Modern animated interface with glassmorphism and cyberpunk design
@@ -42,14 +46,17 @@ The UI follows a glassmorphism design pattern with neon accents, featuring:
 - Real-time processing feedback through WebSocket connections
 
 ### Backend Architecture
-The backend uses Node.js with Express and follows a modular service architecture:
+The backend uses **Python with FastAPI** and follows a modular service architecture:
 
-- **Express.js**: Web server and API routing
-- **TypeScript**: Type safety across the entire stack
+- **FastAPI**: Modern Python web framework with automatic API documentation
+- **Python 3.11**: Latest stable Python with native ML ecosystem
+- **scikit-learn**: Professional machine learning algorithms (t-SNE, UMAP, K-Means, DBSCAN)
+- **pandas**: Advanced data manipulation and analysis
+- **numpy**: High-performance numerical computing
+- **uvicorn**: ASGI server for production-ready deployment
 - **WebSocket**: Real-time communication for processing updates
-- **Native File Processing**: Direct JSON payload handling for file uploads
-- **Memory Storage**: In-memory data persistence with full CRUD operations
-- **Real ML Service**: Complete mathematical implementations of all algorithms
+- **Pydantic**: Data validation and serialization
+- **In-memory Storage**: Fast data persistence with full CRUD operations
 
 The API exposes RESTful endpoints for:
 - Dataset upload and management
