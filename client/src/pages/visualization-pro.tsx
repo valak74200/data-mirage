@@ -56,7 +56,7 @@ export default function VisualizationPro() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [camera, setCamera] = useState({
     rotation: { x: 0.3, y: 0 },
-    zoom: 0.8, // Start with smaller zoom for better overview
+    zoom: 0.5, // Much smaller zoom for wide overview
     autoRotate: true
   });
   const [isDragging, setIsDragging] = useState(false);
@@ -173,7 +173,7 @@ export default function VisualizationPro() {
     // Project to 2D
     const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
     const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = Math.max(2, (perspective) / (perspective + finalZ) * 6);
+    const size = Math.max(1, (perspective) / (perspective + finalZ) * 3);
     
     return { x: projectedX, y: projectedY, size: size, depth: finalZ };
   }, [camera]);
@@ -194,7 +194,7 @@ export default function VisualizationPro() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const points = processingResult.points;
-    const spread = 1.5; // Increase spread for better separation
+    const spread = 2.5; // Much larger spread for clear navigation
 
     // Project all points and sort by depth
     const projectedPoints = points.map(point => {
@@ -206,20 +206,20 @@ export default function VisualizationPro() {
       return { ...point, ...projected };
     }).sort((a, b) => (b.depth || 0) - (a.depth || 0));
 
-    // Draw cluster connections (simplified)
-    if (processingResult.clusters) {
-      ctx.globalAlpha = 0.15;
+    // Optional cluster connections (very light)
+    if (processingResult.clusters && false) { // Disabled for clean navigation
+      ctx.globalAlpha = 0.05;
       processingResult.clusters.forEach(cluster => {
         const clusterPoints = projectedPoints.filter(p => p.cluster === cluster.id);
         
         if (clusterPoints.length > 1) {
           ctx.strokeStyle = cluster.color;
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 0.5;
           
-          // Only connect nearby points
+          // Only connect very close points
           clusterPoints.forEach((point, i) => {
             const nearbyPoints = clusterPoints
-              .slice(i + 1, i + 4) // Only next 3 points
+              .slice(i + 1, i + 2) // Only next point
               .filter(other => {
                 const distance = Math.sqrt(
                   Math.pow(point.position[0] - other.position[0], 2) +
@@ -246,58 +246,34 @@ export default function VisualizationPro() {
       const isSelected = selectedPoint === point.id;
       const isAnomaly = point.isAnomaly;
       
-      // Anomaly glow effect (reduced)
+      // Anomaly indicator (minimal)
       if (isAnomaly) {
-        const glowGradient = ctx.createRadialGradient(
-          point.x, point.y, 0,
-          point.x, point.y, point.size * 2
-        );
-        glowGradient.addColorStop(0, '#ff000060');
-        glowGradient.addColorStop(1, '#ff000000');
-        ctx.fillStyle = glowGradient;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size * 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      
-      // Selection highlight (reduced)
-      if (isSelected) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, point.size + 3, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Pulse effect (reduced)
-        const pulseSize = point.size + 6 + Math.sin(Date.now() * 0.005) * 2;
-        ctx.strokeStyle = '#ffffff40';
+        ctx.strokeStyle = '#ff0000';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(point.x, point.y, pulseSize, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, point.size + 1, 0, Math.PI * 2);
         ctx.stroke();
       }
       
-      // Main point with depth-based size (reduced effect)
-      const depthSize = point.size * (1 + Math.max(0, (point.depth || 0) / 3000));
+      // Selection highlight (minimal)
+      if (isSelected) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, point.size + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      // Main point with minimal depth effect
+      const depthSize = point.size;
       ctx.fillStyle = point.color;
       ctx.beginPath();
       ctx.arc(point.x, point.y, depthSize, 0, Math.PI * 2);
       ctx.fill();
       
-      // Inner highlight (reduced)
-      ctx.fillStyle = '#ffffff40';
-      ctx.beginPath();
-      ctx.arc(
-        point.x - depthSize * 0.3, 
-        point.y - depthSize * 0.3, 
-        depthSize * 0.3, 
-        0, Math.PI * 2
-      );
-      ctx.fill();
-      
-      // Point border for definition
-      ctx.strokeStyle = '#00000040';
-      ctx.lineWidth = 1;
+      // Simple point border only
+      ctx.strokeStyle = '#00000020';
+      ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.arc(point.x, point.y, depthSize, 0, Math.PI * 2);
       ctx.stroke();
