@@ -1,0 +1,28 @@
+The above error occurred in the <ThreeJSScene> component:
+
+    at ThreeJSScene (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/src/components/visualization/three-js-scene.tsx:23:20)
+    at div
+    at div
+    at MotionComponent (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/framer-motion.js?v=f1008c62:6536:40)
+    at div
+    at HomeAuthenticated (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/src/pages/home-authenticated.tsx:29:61)
+    at Route (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=f1008c62:323:16)
+    at Switch (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=f1008c62:379:17)
+    at Router (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/src/App.tsx?v=6tsinA7BGxA9cTwQ-LRDw:44:42)
+    at div
+    at QueryClientProvider (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=f1008c62:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+useVisualizationStore must be used within VisualizationProvider
+at useVisualizationStore (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/src/stores/visualization-store.tsx:123:11)
+at ThreeJSScene (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/src/components/visualization/three-js-scene.tsx:30:49)
+at renderWithHooks (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:11548:26)
+at mountIndeterminateComponent (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:14926:21)
+at beginWork (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:15914:22)
+at beginWork$1 (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:19753:22)
+at performUnitOfWork (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:19198:20)
+at workLoopSync (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:19137:13)
+at renderRootSync (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:19116:15)
+at recoverFromConcurrentError (https://f896d6b6-67eb-4ec8-af57-a6b64cb3039f-00-ok62j04wgfpm.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-WERSD76P.js?v=f1008c62:18736:28)

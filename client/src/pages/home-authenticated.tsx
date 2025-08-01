@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import ThreeJSScene from "@/components/visualization/three-js-scene";
+import Simple3DCanvas from "@/components/visualization/simple-3d-canvas";
 import DatasetUpload from "@/components/dataset/dataset-upload";
 import MLControls from "@/components/ml/ml-controls";
 
@@ -189,7 +189,7 @@ export default function HomeAuthenticated() {
 
         {/* 3D Visualization */}
         <div className="flex-1 relative">
-          <ThreeJSScene />
+          <Simple3DCanvas processingResult={processingResult} />
           
           {!selectedDataset && (
             <motion.div 
