@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import ParticleBackground from "@/components/visualization/particle-background";
 import ControlsPanel from "@/components/visualization/controls-panel";
 import ThreeScene from "@/components/visualization/three-scene";
@@ -7,11 +7,14 @@ import LegendPanel from "@/components/visualization/legend-panel";
 import InfoPanel from "@/components/visualization/info-panel";
 import Minimap from "@/components/visualization/minimap";
 import { useVisualizationStore } from "@/stores/visualization-store";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function Home() {
   const visualizationStore = useVisualizationStore();
   const { currentDataset, processingResult, hoveredPoint, resetCamera } = visualizationStore;
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -27,14 +30,50 @@ export default function Home() {
     <div className="relative h-screen flex bg-space text-white overflow-hidden">
       <ParticleBackground />
       
-      {/* Side Panel */}
-      <motion.div
-        initial={{ x: -320 }}
-        animate={{ x: 0 }}
-        className="w-80 glass-panel border-r border-cyan-500/30 p-6 overflow-y-auto z-10"
-      >
-        <ControlsPanel />
-      </motion.div>
+      {/* Desktop Side Panel */}
+      {!isMobile && (
+        <motion.div
+          initial={{ x: -320 }}
+          animate={{ x: 0 }}
+          className="w-80 glass-panel border-r border-cyan-500/30 p-6 overflow-y-auto z-10"
+        >
+          <ControlsPanel />
+        </motion.div>
+      )}
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobile && isMobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-30"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <motion.div
+              initial={{ x: -320 }}
+              animate={{ x: 0 }}
+              exit={{ x: -320 }}
+              className="fixed left-0 top-0 h-full w-80 glass-panel border-r border-cyan-500/30 p-4 overflow-y-auto z-40"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-cyan-400">CONTROLS</h2>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <ControlsPanel />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Visualization Area */}
       <div className="flex-1 relative">
@@ -42,10 +81,20 @@ export default function Home() {
         <motion.div
           initial={{ y: -60 }}
           animate={{ y: 0 }}
-          className="absolute top-4 left-4 right-4 flex justify-between items-center z-20"
+          className={`absolute top-4 left-4 right-4 flex justify-between items-center z-20 ${isMobile ? 'flex-wrap gap-2' : ''}`}
         >
-          {/* View Controls */}
+          {/* Mobile Menu + View Controls */}
           <div className="flex space-x-2">
+            {isMobile && (
+              <button 
+                className="glass-panel neon-border rounded-lg p-2 hover:bg-cyan-500/20 transition-all duration-300"
+                onClick={() => setIsMobileMenuOpen(true)}
+              >
+                <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             <button 
               className="glass-panel neon-border rounded-lg p-2 hover:bg-cyan-500/20 transition-all duration-300"
               onClick={resetCamera}
@@ -54,48 +103,52 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
-            <button 
-              className="glass-panel neon-border rounded-lg p-2 hover:bg-green-500/20 transition-all duration-300"
-              onClick={toggleFullscreen}
-            >
-              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
-              </svg>
-            </button>
+            {!isMobile && (
+              <button 
+                className="glass-panel neon-border rounded-lg p-2 hover:bg-green-500/20 transition-all duration-300"
+                onClick={toggleFullscreen}
+              >
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Processing Status */}
-          <div className="glass-panel rounded-lg px-4 py-2">
+          <div className="glass-panel rounded-lg px-3 py-1">
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${processingResult ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
-              <span className="text-sm font-mono text-green-400">
+              <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-mono text-green-400`}>
                 {processingResult ? 'READY' : 'WAITING'}
               </span>
             </div>
           </div>
 
-          {/* Export Controls */}
-          <div className="flex space-x-2">
-            <button className="glass-panel neon-border rounded-lg px-4 py-2 hover:bg-violet-500/20 transition-all duration-300 text-sm font-mono">
-              EXPORT
-            </button>
-            <button className="glass-panel neon-border rounded-lg px-4 py-2 hover:bg-cyan-500/20 transition-all duration-300 text-sm font-mono">
-              BOOKMARK
-            </button>
-          </div>
+          {/* Export Controls - Hide on mobile */}
+          {!isMobile && (
+            <div className="flex space-x-2">
+              <button className="glass-panel neon-border rounded-lg px-4 py-2 hover:bg-violet-500/20 transition-all duration-300 text-sm font-mono">
+                EXPORT
+              </button>
+              <button className="glass-panel neon-border rounded-lg px-4 py-2 hover:bg-cyan-500/20 transition-all duration-300 text-sm font-mono">
+                BOOKMARK
+              </button>
+            </div>
+          )}
         </motion.div>
 
         {/* 3D Visualization */}
         <ThreeScene />
 
         {/* Info Panel */}
-        {hoveredPoint && <InfoPanel point={hoveredPoint} />}
+        {hoveredPoint && <InfoPanel point={hoveredPoint} isMobile={isMobile} />}
 
         {/* Legend Panel */}
-        {processingResult && <LegendPanel clusters={processingResult.clusters} />}
+        {processingResult && <LegendPanel clusters={processingResult.clusters} isMobile={isMobile} />}
 
-        {/* Minimap */}
-        <Minimap />
+        {/* Minimap - Hide on mobile */}
+        {!isMobile && <Minimap />}
       </div>
     </div>
   );

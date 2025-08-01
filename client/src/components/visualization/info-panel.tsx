@@ -4,15 +4,16 @@ import { DataPoint } from "@shared/schema";
 
 interface InfoPanelProps {
   point: DataPoint;
+  isMobile?: boolean;
 }
 
-export default function InfoPanel({ point }: InfoPanelProps) {
+export default function InfoPanel({ point, isMobile = false }: InfoPanelProps) {
   return (
     <motion.div
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 100, opacity: 0 }}
-      className="absolute bottom-4 left-4 z-20 max-w-sm"
+      className={`absolute ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-4 left-4'} z-20 ${isMobile ? '' : 'max-w-sm'}`}
     >
       <GlassPanel className="p-4">
         <div className="font-orbitron text-sm font-bold text-cyan-400 mb-2 neon-glow">

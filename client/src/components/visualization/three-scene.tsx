@@ -22,6 +22,7 @@ export default function ThreeScene() {
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+  const [lastTouchDistance, setLastTouchDistance] = useState(0);
 
   const points3D = useMemo(() => {
     if (!processingResult?.points) return [];
@@ -141,30 +142,84 @@ export default function ThreeScene() {
     });
   }, [points3D, project3DTo2D]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
     setIsDragging(true);
-    setLastMousePos({ x: e.clientX, y: e.clientY });
+    
+    if ('touches' in e) {
+      if (e.touches.length === 2) {
+        // Pinch gesture
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.sqrt(
+          Math.pow(touch2.clientX - touch1.clientX, 2) + 
+          Math.pow(touch2.clientY - touch1.clientY, 2)
+        );
+        setLastTouchDistance(distance);
+      } else {
+        // Single touch
+        setLastMousePos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+      }
+    } else {
+      setLastMousePos({ x: e.clientX, y: e.clientY });
+    }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      const deltaX = e.clientX - lastMousePos.x;
-      const deltaY = e.clientY - lastMousePos.y;
-      
-      setRotation(prev => ({
-        x: prev.x + deltaY * 0.01,
-        y: prev.y + deltaX * 0.01
-      }));
-      
-      setLastMousePos({ x: e.clientX, y: e.clientY });
+  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    
+    if ('touches' in e) {
+      if (e.touches.length === 2) {
+        // Handle pinch zoom
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.sqrt(
+          Math.pow(touch2.clientX - touch1.clientX, 2) + 
+          Math.pow(touch2.clientY - touch1.clientY, 2)
+        );
+        
+        if (lastTouchDistance > 0) {
+          const scaleFactor = distance / lastTouchDistance;
+          setZoom(prev => Math.max(0.1, Math.min(5, prev * scaleFactor)));
+        }
+        setLastTouchDistance(distance);
+      } else if (isDragging && e.touches.length === 1) {
+        // Single touch rotation
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+        const deltaX = clientX - lastMousePos.x;
+        const deltaY = clientY - lastMousePos.y;
+        
+        setRotation(prev => ({
+          x: prev.x + deltaY * 0.01,
+          y: prev.y + deltaX * 0.01
+        }));
+        
+        setLastMousePos({ x: clientX, y: clientY });
+      }
     } else {
+      // Mouse handling
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      
+      if (isDragging) {
+        const deltaX = clientX - lastMousePos.x;
+        const deltaY = clientY - lastMousePos.y;
+        
+        setRotation(prev => ({
+          x: prev.x + deltaY * 0.01,
+          y: prev.y + deltaX * 0.01
+        }));
+        
+        setLastMousePos({ x: clientX, y: clientY });
+      } else {
       // Handle hover detection
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = clientX - rect.left;
+        const mouseY = clientY - rect.top;
 
       // Find closest point
       let closestPoint: DataPoint | null = null;
@@ -187,12 +242,14 @@ export default function ThreeScene() {
         }
       });
 
-      setHoveredPoint(closestPoint);
+        setHoveredPoint(closestPoint);
+      }
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e?: React.TouchEvent) => {
     setIsDragging(false);
+    setLastTouchDistance(0);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -238,11 +295,14 @@ export default function ThreeScene() {
     <div className="w-full h-full relative">
       <canvas
         ref={canvasRef}
-        className="w-full h-full cursor-move"
+        className="w-full h-full cursor-move touch-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleMouseDown}
+        onTouchMove={handleMouseMove}
+        onTouchEnd={handleMouseUp}
         onWheel={handleWheel}
         style={{ background: 'transparent' }}
       />
@@ -272,8 +332,8 @@ export default function ThreeScene() {
       
       {/* Controls hint */}
       <div className="absolute bottom-4 left-4 text-xs text-gray-500">
-        <div>Click & drag to rotate</div>
-        <div>Scroll to zoom</div>
+        <div>Touch & drag to rotate</div>
+        <div>Pinch to zoom</div>
       </div>
     </div>
   );

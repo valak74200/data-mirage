@@ -64,6 +64,10 @@
     @apply font-mono antialiased text-foreground overflow-hidden;
     background: var(--space);
     cursor: crosshair;
+    touch-action: none; /* Prevent default touch behaviors */
+    -webkit-touch-callout: none; /* Disable iOS callouts */
+    -webkit-user-select: none; /* Disable text selection */
+    user-select: none;
   }
 }
 
@@ -73,6 +77,19 @@
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Mobile optimizations */
+  @media (max-width: 768px) {
+    .glass-panel {
+      backdrop-filter: blur(8px); /* Reduce blur for better mobile performance */
+    }
+    
+    /* Larger touch targets */
+    button {
+      min-height: 44px;
+      min-width: 44px;
+    }
   }
   
   .neon-border {

@@ -10,14 +10,15 @@ interface Cluster {
 
 interface LegendPanelProps {
   clusters: Cluster[];
+  isMobile?: boolean;
 }
 
-export default function LegendPanel({ clusters }: LegendPanelProps) {
+export default function LegendPanel({ clusters, isMobile = false }: LegendPanelProps) {
   return (
     <motion.div
       initial={{ x: 300, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      className="absolute top-20 right-4 z-20"
+      className={`absolute ${isMobile ? 'top-16 left-4 right-4' : 'top-20 right-4'} z-20`}
     >
       <GlassPanel className="p-4">
         <div className="font-orbitron text-sm font-bold text-violet-400 mb-3 neon-glow">
