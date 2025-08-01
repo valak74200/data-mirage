@@ -27,17 +27,21 @@ export default function ThreeScene() {
   const points3D = useMemo(() => {
     if (!processingResult?.points) return [];
     
-    return processingResult.points.map(point => ({
-      x: point.position[0],
-      y: point.position[1], 
-      z: point.position[2],
-      screenX: 0,
-      screenY: 0,
-      size: Math.max(2, point.size * 5),
-      color: point.color,
-      isAnomaly: point.isAnomaly || false,
-      point
-    }));
+    return processingResult.points.map(point => {
+      // Increase spread for better visibility
+      const spread = 150;
+      return {
+        x: point.position[0] * spread,
+        y: point.position[1] * spread, 
+        z: point.position[2] * spread,
+        screenX: 0,
+        screenY: 0,
+        size: Math.max(3, point.size * 7), // Slightly larger points
+        color: point.color,
+        isAnomaly: point.isAnomaly || false,
+        point
+      };
+    });
   }, [processingResult]);
 
   const project3DTo2D = useCallback((point3D: Point3D, width: number, height: number) => {
@@ -66,6 +70,17 @@ export default function ThreeScene() {
       scale: perspective * zoom 
     };
   }, [rotation, zoom]);
+
+  // Group points by cluster for drawing connections
+  const clusterGroups = useMemo(() => {
+    const groups: { [key: string]: Point3D[] } = {};
+    points3D.forEach(point => {
+      const clusterId = point.point.clusterId || 'none';
+      if (!groups[clusterId]) groups[clusterId] = [];
+      groups[clusterId].push(point);
+    });
+    return groups;
+  }, [points3D]);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -107,6 +122,44 @@ export default function ThreeScene() {
       ...point,
       ...project3DTo2D(point, width, height)
     })).sort((a, b) => a.depth - b.depth);
+
+    // Draw cluster connections (lines between points in same cluster)
+    Object.entries(clusterGroups).forEach(([clusterId, clusterPoints]) => {
+      if (clusterId === 'none' || clusterPoints.length < 2) return;
+      
+      // Project all points in this cluster
+      const projectedClusterPoints = clusterPoints.map(point => ({
+        ...point,
+        ...project3DTo2D(point, width, height)
+      }));
+      
+      // Draw connections between nearby points in the same cluster
+      ctx.globalAlpha = 0.2;
+      ctx.strokeStyle = clusterPoints[0]?.color || '#ffffff';
+      ctx.lineWidth = 1;
+      
+      for (let i = 0; i < projectedClusterPoints.length; i++) {
+        for (let j = i + 1; j < projectedClusterPoints.length; j++) {
+          const pointA = projectedClusterPoints[i];
+          const pointB = projectedClusterPoints[j];
+          
+          // Only connect points that are relatively close in 3D space
+          const distance3D = Math.sqrt(
+            Math.pow(pointA.x - pointB.x, 2) +
+            Math.pow(pointA.y - pointB.y, 2) +
+            Math.pow(pointA.z - pointB.z, 2)
+          );
+          
+          // Connect only nearby points to avoid visual clutter
+          if (distance3D < 100) {
+            ctx.beginPath();
+            ctx.moveTo(pointA.screenX, pointA.screenY);
+            ctx.lineTo(pointB.screenX, pointB.screenY);
+            ctx.stroke();
+          }
+        }
+      }
+    });
 
     // Draw points
     projectedPoints.forEach(point => {

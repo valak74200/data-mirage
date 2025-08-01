@@ -88,13 +88,14 @@ export default function ControlsPanel() {
           <div className="space-y-4">
             {/* Color Mapping */}
             <GlassPanel className="p-3">
-              <label className="block text-xs text-gray-400 mb-2">COLOR MAPPING</label>
+              <label className="block text-xs text-gray-400 mb-2">COULEURS PAR DONNÉE</label>
+              <p className="text-xs text-gray-500 mb-3">Choisissez quelle colonne détermine les couleurs des points</p>
               <Select 
                 value={mlConfig.colorColumn} 
                 onValueChange={(value) => setMLConfig({ colorColumn: value })}
               >
                 <SelectTrigger className="w-full bg-void border-gray-600 focus:border-cyan-400">
-                  <SelectValue placeholder="Select column" />
+                  <SelectValue placeholder="Choisir une colonne" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableColumns.map((col: string) => (
@@ -106,16 +107,17 @@ export default function ControlsPanel() {
 
             {/* Size Mapping */}
             <GlassPanel className="p-3">
-              <label className="block text-xs text-gray-400 mb-2">SIZE MAPPING</label>
+              <label className="block text-xs text-gray-400 mb-2">TAILLE PAR DONNÉE</label>
+              <p className="text-xs text-gray-500 mb-3">Choisissez quelle colonne détermine la taille des points</p>
               <Select 
                 value={mlConfig.sizeColumn} 
                 onValueChange={(value) => setMLConfig({ sizeColumn: value })}
               >
                 <SelectTrigger className="w-full bg-void border-gray-600 focus:border-cyan-400">
-                  <SelectValue placeholder="Select column" />
+                  <SelectValue placeholder="Choisir une colonne" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="uniform">Uniform Size</SelectItem>
+                  <SelectItem value="uniform">Taille uniforme</SelectItem>
                   {availableColumns.map((col: string) => (
                     <SelectItem key={col} value={col}>{col}</SelectItem>
                   ))}
@@ -125,7 +127,12 @@ export default function ControlsPanel() {
 
             {/* Dimension Reduction Method */}
             <GlassPanel className="p-3">
-              <label className="block text-xs text-gray-400 mb-2">DIMENSION REDUCTION</label>
+              <label className="block text-xs text-gray-400 mb-2">RÉDUCTION DE DIMENSIONS</label>
+              <p className="text-xs text-gray-500 mb-3">Convertit vos données en 3D pour la visualisation</p>
+              <div className="text-xs text-gray-600 mb-2">
+                <div>• <strong>t-SNE</strong> : Bon pour découvrir des groupes locaux</div>
+                <div>• <strong>UMAP</strong> : Préserve mieux la structure globale</div>
+              </div>
               <div className="flex space-x-2">
                 <NeonButton
                   variant="cyan"
@@ -166,7 +173,12 @@ export default function ControlsPanel() {
           <div className="space-y-4">
             {/* Algorithm Selection */}
             <GlassPanel className="p-3">
-              <label className="block text-xs text-gray-400 mb-2">ALGORITHM</label>
+              <label className="block text-xs text-gray-400 mb-2">ALGORITHME DE GROUPAGE</label>
+              <p className="text-xs text-gray-500 mb-3">Trouve automatiquement des groupes dans vos données</p>
+              <div className="text-xs text-gray-600 mb-2">
+                <div>• <strong>K-Means</strong> : Crée des groupes de taille similaire</div>
+                <div>• <strong>DBSCAN</strong> : Trouve des groupes de densité différente</div>
+              </div>
               <div className="flex space-x-2">
                 <NeonButton
                   variant="green"
@@ -192,8 +204,9 @@ export default function ControlsPanel() {
             {/* Cluster Count */}
             <GlassPanel className="p-3">
               <label className="block text-xs text-gray-400 mb-2">
-                CLUSTERS: <span className="text-green-400">{clusterCount}</span>
+                NOMBRE DE GROUPES: <span className="text-green-400">{clusterCount}</span>
               </label>
+              <p className="text-xs text-gray-500 mb-2">Combien de groupes différents chercher dans vos données</p>
               <Slider
                 value={[clusterCount]}
                 onValueChange={(value) => setClusterCount(value[0])}
@@ -212,7 +225,10 @@ export default function ControlsPanel() {
                   onCheckedChange={(checked) => setMLConfig({ detectAnomalies: !!checked })}
                   className="border-gray-600 data-[state=checked]:bg-violet-500"
                 />
-                <span>DETECT ANOMALIES</span>
+                <div>
+                  <span>DÉTECTER LES ANOMALIES</span>
+                  <p className="text-xs text-gray-500 mt-1">Identifie les données inhabituelles ou suspectes</p>
+                </div>
               </label>
             </GlassPanel>
 
