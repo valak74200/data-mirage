@@ -1,0 +1,188 @@
+import type { Express, Request, Response } from "express";
+import { createServer, type Server } from "http";
+import { WebSocketServer } from "ws";
+import { storage } from "./storage";
+import { mlProcessor } from "./services/ml-processor";
+import { insertDatasetSchema, insertVisualizationSchema, mlConfigSchema } from "@shared/schema";
+import { z } from "zod";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  const httpServer = createServer(app);
+
+  // WebSocket server for real-time updates
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket');
+    
+    ws.on('message', async (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        console.log('WebSocket message:', data);
+        
+        // Handle real-time processing requests
+        if (data.type === 'process_dataset') {
+          ws.send(JSON.stringify({
+            type: 'processing_started',
+            message: 'Starting data processing...'
+          }));
+        }
+      } catch (error) {
+        console.error('WebSocket error:', error);
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('Client disconnected from WebSocket');
+    });
+  });
+
+  // Dataset routes
+  app.post('/api/datasets', async (req: Request, res: Response) => {
+    try {
+      const { fileName, fileContent, mimeType } = req.body;
+      
+      if (!fileContent || !fileName) {
+        return res.status(400).json({ error: 'No file content or name provided' });
+      }
+
+      let data: any[];
+      
+      // Parse CSV or JSON
+      if (mimeType === 'application/json' || fileName.endsWith('.json')) {
+        data = JSON.parse(fileContent);
+      } else {
+        // Simple CSV parser
+        const lines = fileContent.split('\n').filter((line: string) => line.trim());
+        const headers = lines[0].split(',').map((h: string) => h.trim());
+        data = lines.slice(1).map((line: string) => {
+          const values = line.split(',').map((v: string) => v.trim());
+          const row: any = {};
+          headers.forEach((header: string, index: number) => {
+            const value = values[index];
+            // Try to parse as number
+            const numValue = parseFloat(value);
+            row[header] = isNaN(numValue) ? value : numValue;
+          });
+          return row;
+        });
+      }
+
+      const metadata = {
+        fileName: fileName,
+        fileSize: fileContent.length,
+        rowCount: data.length,
+        columnCount: data.length > 0 ? Object.keys(data[0]).length : 0,
+        columns: data.length > 0 ? Object.keys(data[0]) : [],
+        uploadedAt: new Date().toISOString(),
+      };
+
+      const dataset = await storage.createDataset({
+        name: fileName,
+        originalData: data,
+        metadata,
+      });
+
+      res.json(dataset);
+    } catch (error) {
+      console.error('Dataset upload error:', error);
+      res.status(500).json({ error: 'Failed to process dataset' });
+    }
+  });
+
+  app.get('/api/datasets', async (req, res) => {
+    try {
+      const datasets = await storage.getAllDatasets();
+      res.json(datasets);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch datasets' });
+    }
+  });
+
+  app.get('/api/datasets/:id', async (req, res) => {
+    try {
+      const dataset = await storage.getDataset(req.params.id);
+      if (!dataset) {
+        return res.status(404).json({ error: 'Dataset not found' });
+      }
+      res.json(dataset);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch dataset' });
+    }
+  });
+
+  // Visualization routes
+  app.post('/api/visualizations', async (req, res) => {
+    try {
+      const validatedData = insertVisualizationSchema.parse(req.body);
+      const visualization = await storage.createVisualization(validatedData);
+      res.json(visualization);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid visualization data', details: error.errors });
+      }
+      res.status(500).json({ error: 'Failed to create visualization' });
+    }
+  });
+
+  app.get('/api/visualizations/:id', async (req, res) => {
+    try {
+      const visualization = await storage.getVisualization(req.params.id);
+      if (!visualization) {
+        return res.status(404).json({ error: 'Visualization not found' });
+      }
+      res.json(visualization);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch visualization' });
+    }
+  });
+
+  // ML Processing route
+  app.post('/api/process/:datasetId', async (req, res) => {
+    try {
+      const dataset = await storage.getDataset(req.params.datasetId);
+      if (!dataset) {
+        return res.status(404).json({ error: 'Dataset not found' });
+      }
+
+      const config = mlConfigSchema.parse(req.body);
+      
+      // Broadcast processing start to connected WebSocket clients
+      wss.clients.forEach(client => {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          client.send(JSON.stringify({
+            type: 'processing_started',
+            datasetId: req.params.datasetId,
+            config
+          }));
+        }
+      });
+
+      const result = await mlProcessor.processDataset(
+        dataset.originalData as Record<string, any>[],
+        config
+      );
+
+      // Broadcast processing completion
+      wss.clients.forEach(client => {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          client.send(JSON.stringify({
+            type: 'processing_completed',
+            datasetId: req.params.datasetId,
+            result
+          }));
+        }
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Processing error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid processing config', details: error.errors });
+      }
+      res.status(500).json({ error: 'Failed to process dataset' });
+    }
+  });
+
+  return httpServer;
+}
