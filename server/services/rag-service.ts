@@ -29,11 +29,12 @@ export class RAGService {
         });
       } catch (error) {
         console.error(`Error analyzing cluster ${cluster.id}:`, error);
+        const clusterPoints = processingResult.points.filter(p => p.cluster === cluster.id);
         analyses.push({
           clusterId: cluster.id,
-          explanation: `Cluster ${cluster.id} contient ${cluster.points.length} points de données avec des caractéristiques similaires.`,
+          explanation: `Cluster ${cluster.id} contient ${clusterPoints.length} points de données avec des caractéristiques similaires.`,
           characteristics: ['Données groupées par similarité', 'Analyse en cours'],
-          dataPoints: cluster.points.length,
+          dataPoints: clusterPoints.length,
           keyFeatures: ['Caractéristiques communes', 'Patron identifié']
         });
       }
@@ -100,7 +101,7 @@ export class RAGService {
     return `Tu es un expert en analyse de données. Analyse ce cluster de données et explique-le en français simple pour des débutants.
 
 Dataset: ${datasetMetadata.fileName || 'données'}
-Cluster ${cluster.id}: ${cluster.points.length} points de données
+Cluster ${cluster.id}: ${cluster.count || 'plusieurs'} points de données
 Caractéristiques statistiques: ${featureDescriptions}
 
 Explique en 2-3 phrases courtes:

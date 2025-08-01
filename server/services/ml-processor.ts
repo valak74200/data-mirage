@@ -464,7 +464,19 @@ export class MLProcessor {
   }
 
   private getClusterColor(cluster: number): string {
-    const colors = ['#00ffff', '#00ff88', '#8b5cf6', '#ff6b6b', '#ffd93d', '#74c0fc'];
+    // High-contrast, vibrant colors optimized for dark backgrounds
+    const colors = [
+      '#00D4FF', // Bright cyan
+      '#00FF88', // Bright green
+      '#FF6B35', // Bright orange
+      '#FF3B85', // Bright pink
+      '#B347FF', // Bright purple
+      '#FFED4E', // Bright yellow
+      '#47C7FF', // Light blue
+      '#FF7B7B', // Light red
+      '#85FF85', // Light green
+      '#FFB347'  // Light orange
+    ];
     return colors[cluster % colors.length];
   }
 

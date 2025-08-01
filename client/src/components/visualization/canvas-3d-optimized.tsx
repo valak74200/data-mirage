@@ -28,7 +28,8 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
   const rotationRef = useRef({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(2);
+  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
   const animationRef = useRef<number>();
 
   // Simple 3D projection function
@@ -51,9 +52,9 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
     // Project to 2D
     const projectedX = (rotatedX * perspective) / (perspective + finalZ) * scale + canvas.width / 2;
     const projectedY = (rotatedY * perspective) / (perspective + finalZ) * scale + canvas.height / 2;
-    const size = (perspective) / (perspective + finalZ) * 8;
+    const size = (perspective) / (perspective + finalZ) * 12;
     
-    return { x: projectedX, y: projectedY, size: Math.max(2, size), depth: finalZ };
+    return { x: projectedX, y: projectedY, size: Math.max(4, size), depth: finalZ };
   }, [zoom]);
 
   const draw = useCallback(() => {
@@ -72,7 +73,7 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const points = processingResult.points;
-    const spread = 2;
+    const spread = 50; // Increase spread to make points more visible
 
     // Project all points and sort by depth
     const projectedPoints = points.map(point => {
@@ -85,34 +86,39 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
       return { ...point, ...projected };
     }).sort((a, b) => b.depth - a.depth);
 
-    // Draw cluster connections
+    // Draw simplified cluster connections (only nearby points)
     if (processingResult.clusters) {
       processingResult.clusters.forEach(cluster => {
         const clusterPoints = projectedPoints.filter(p => p.cluster === cluster.id);
         
         if (clusterPoints.length > 1) {
-          ctx.strokeStyle = cluster.color + '40';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = cluster.color + '30';
+          ctx.lineWidth = 0.5;
           
-          for (let i = 0; i < clusterPoints.length; i++) {
-            for (let j = i + 1; j < clusterPoints.length; j++) {
-              const pointA = clusterPoints[i];
-              const pointB = clusterPoints[j];
-              
-              const distance = Math.sqrt(
-                Math.pow(pointA.position[0] - pointB.position[0], 2) +
-                Math.pow(pointA.position[1] - pointB.position[1], 2) +
-                Math.pow(pointA.position[2] - pointB.position[2], 2)
-              );
-              
-              if (distance < 2) {
+          // Only connect nearest neighbors to reduce visual clutter
+          clusterPoints.forEach((point, i) => {
+            const nearbyPoints = clusterPoints
+              .filter((_, j) => j !== i)
+              .map(other => ({
+                point: other,
+                distance: Math.sqrt(
+                  Math.pow(point.position[0] - other.position[0], 2) +
+                  Math.pow(point.position[1] - other.position[1], 2) +
+                  Math.pow(point.position[2] - other.position[2], 2)
+                )
+              }))
+              .sort((a, b) => a.distance - b.distance)
+              .slice(0, 2); // Only connect to 2 nearest neighbors
+            
+            nearbyPoints.forEach(({ point: nearbyPoint, distance }) => {
+              if (distance < 1.5) {
                 ctx.beginPath();
-                ctx.moveTo(pointA.x, pointA.y);
-                ctx.lineTo(pointB.x, pointB.y);
+                ctx.moveTo(point.x, point.y);
+                ctx.lineTo(nearbyPoint.x, nearbyPoint.y);
                 ctx.stroke();
               }
-            }
-          }
+            });
+          });
         }
       });
     }
@@ -120,6 +126,7 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
     // Draw points
     projectedPoints.forEach(point => {
       const isAnomaly = processingResult.anomalies?.includes(point.id);
+      const isSelected = selectedPoint === point.id;
       
       if (isAnomaly) {
         const glowGradient = ctx.createRadialGradient(
@@ -134,17 +141,33 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
         ctx.fill();
       }
       
+      // Selection highlight
+      if (isSelected) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, point.size + 4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
       // Main point
       ctx.fillStyle = point.color;
       ctx.beginPath();
       ctx.arc(point.x, point.y, point.size, 0, Math.PI * 2);
       ctx.fill();
       
-      // Highlight
-      ctx.fillStyle = '#ffffff40';
+      // Inner highlight
+      ctx.fillStyle = '#ffffff60';
       ctx.beginPath();
       ctx.arc(point.x - point.size * 0.3, point.y - point.size * 0.3, point.size * 0.3, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Point border for better visibility
+      ctx.strokeStyle = '#000000aa';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, point.size, 0, Math.PI * 2);
+      ctx.stroke();
     });
   }, [processingResult, project3D]);
 
@@ -190,9 +213,40 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
 
   // Mouse interactions
   const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setAutoRotate(false);
-    setLastMouse({ x: e.clientX, y: e.clientY });
+    const canvas = canvasRef.current;
+    if (!canvas || !processingResult?.points) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Check if click is on a point
+    let clickedPoint = null;
+    const points = processingResult.points.map(point => {
+      const projected = project3D(
+        point.position[0] * 50,
+        point.position[1] * 50,
+        point.position[2] * 50,
+        canvas
+      );
+      return { ...point, ...projected };
+    });
+
+    for (const point of points) {
+      const distance = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
+      if (distance <= point.size + 2) {
+        clickedPoint = point;
+        break;
+      }
+    }
+
+    if (clickedPoint) {
+      setSelectedPoint(selectedPoint === clickedPoint.id ? null : clickedPoint.id);
+    } else {
+      setIsDragging(true);
+      setAutoRotate(false);
+      setLastMouse({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -296,6 +350,68 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
         </motion.button>
       </motion.div>
       
+      {/* Point Information Panel */}
+      {selectedPoint && (() => {
+        const point = processingResult.points.find(p => p.id === selectedPoint);
+        return point ? (
+          <motion.div 
+            className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md rounded-lg p-4 border border-cyan-400/30 max-w-sm"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="text-white">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-lg font-semibold text-cyan-400">Point sélectionné</h4>
+                <button
+                  onClick={() => setSelectedPoint(null)}
+                  className="text-gray-400 hover:text-white w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-300">ID:</span>
+                  <span className="text-white font-mono">{point.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Cluster:</span>
+                  <span className="text-green-400 font-semibold">{point.cluster}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Position:</span>
+                  <span className="text-blue-400 font-mono text-xs">
+                    [{point.position[0].toFixed(1)}, {point.position[1].toFixed(1)}, {point.position[2].toFixed(1)}]
+                  </span>
+                </div>
+                {processingResult.anomalies?.includes(point.id) && (
+                  <div className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs border border-red-500/30">
+                    🚨 Anomalie détectée
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <h5 className="text-xs font-semibold text-gray-400 mb-2">DONNÉES ORIGINALES</h5>
+                <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
+                  {Object.entries(point.originalData || {}).slice(0, 6).map(([key, value]) => (
+                    <div key={key} className="flex justify-between">
+                      <span className="text-gray-400 truncate">{key}:</span>
+                      <span className="text-white ml-2 truncate">{String(value)}</span>
+                    </div>
+                  ))}
+                  {Object.keys(point.originalData || {}).length > 6 && (
+                    <div className="text-gray-500 text-center">... et {Object.keys(point.originalData || {}).length - 6} autres</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : null;
+      })()}
+
       <motion.div 
         className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md rounded-lg p-3 border border-white/10"
         initial={{ opacity: 0, y: 50 }}
@@ -305,6 +421,7 @@ export default function Canvas3DOptimized({ processingResult }: Canvas3DOptimize
         <div className="text-xs text-gray-300 space-y-1">
           <div>🖱️ Glisser pour tourner</div>
           <div>🔄 Molette pour zoomer</div>
+          <div>👆 Cliquer sur les points</div>
           <div>✨ Interface optimisée iPhone</div>
         </div>
       </motion.div>
