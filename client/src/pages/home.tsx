@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ParticleBackground from "@/components/visualization/particle-background";
 import ControlsPanel from "@/components/visualization/controls-panel";
-import ThreeScene from "@/components/visualization/three-scene";
+import ThreeSceneEnhanced from "@/components/visualization/three-scene-enhanced";
 import LegendPanel from "@/components/visualization/legend-panel";
 import InfoPanel from "@/components/visualization/info-panel";
 import Minimap from "@/components/visualization/minimap";
@@ -139,7 +139,7 @@ export default function Home() {
         </motion.div>
 
         {/* 3D Visualization */}
-        <ThreeScene />
+        <ThreeSceneEnhanced />
 
         {/* Info Panel */}
         {hoveredPoint && <InfoPanel point={hoveredPoint} isMobile={isMobile} />}

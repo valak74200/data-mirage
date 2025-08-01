@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useVisualizationStore } from "@/stores/visualization-store";
+import DatasetStats from "./dataset-stats";
 
 export default function ControlsPanel() {
   const {
@@ -14,7 +15,8 @@ export default function ControlsPanel() {
     mlConfig,
     setMLConfig,
     processDataset,
-    isProcessing
+    isProcessing,
+    processingResult
   } = useVisualizationStore();
 
   const [clusterCount, setClusterCount] = useState(3);
